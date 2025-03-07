@@ -15,6 +15,7 @@ RUN apt-get update && \
         build-essential \
         clang \
         clang-tidy \
+        clang-format-18 \
         lldb \
         gdb \
         curl \
