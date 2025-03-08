@@ -15,7 +15,8 @@
 				"ms-vscode.cpptools",
 				"ms-vscode.cmake-tools",
 				"vadimcn.vscode-lldb",
-				"cheshirekow.cmake-format"
+				"cheshirekow.cmake-format",
+				"ms-vscode.cpptools-extension-pack"
 			],
 			"features": {
 				"terraform": "latest",
