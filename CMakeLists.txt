@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.7)
 project(OpenGGS)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Adjust the checks, warning settings, etc. as you prefer:
+    set(CMAKE_CXX_CLANG_TIDY 
+        "clang-tidy"
+    )
+    message(STATUS "clang-tidy set:  ${CMAKE_CXX_CLANG_TIDY}")
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${OpenGGS_SOURCE_DIR}/cmake")
 
 find_package(SDL2 REQUIRED)
