@@ -5,7 +5,8 @@
 #define NUM_MODULES_INDOORS 16
 #define NUM_MODULES_INDOORS_EXITS 8
 
-void STAGE_Load(int StageNumber, int CheckPointNumber, bool ShowSplashScreen, bool ShowResultspage);
+void STAGE_Load(int StageNumber, int CheckPointNumber, bool ShowSplashScreen,
+                bool ShowResultspage);
 void STAGE_Save(int StageNumber);
 void STAGE_Copy_To_Cache(int StageNumber);
 void STAGE_Copy_To_StageC64();
@@ -18,7 +19,8 @@ void STAGE_Interface_Draw();
 void LOOP_Editor_Stages();
 void LOOP_Editor_Stages_Change_Stage_Settings();
 bool LOOP_Editor_Stages_Room_For_Object(int TileType, int x, int y);
-void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects, bool RandomPlants, bool RandomCoins);
+void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects,
+                               bool RandomPlants, bool RandomCoins);
 void LOOP_Editor_Stages_Create_Distribute_Modules(int BackgroundColour);
 void LOOP_Editor_Stages_Create_Distribute_Objects(int BackgroundColour);
 void LOOP_Editor_Stages_Delete_Tile(int x, int y);
@@ -59,7 +61,7 @@ typedef struct {
   bool ShowInterface;
   bool SingleTileMode;
   int CurrentTileType;
-  int TileType;        // above ground, underground, different colours...
+  int TileType;  // above ground, underground, different colours...
   int CurrentEnemy;
   int CurrentEnemyType;
   bool DrawGrid;
@@ -110,9 +112,10 @@ typedef struct {
   int CheckPointX[4];
   int CheckPointY[4];
   int BackgroundColour;
-  int TileType;            // above ground, underground, different colours...
+  int TileType;  // above ground, underground, different colours...
   int AnimationCounter[256][30];
-}StageDef_C64;
+} StageDef_C64;
+
 extern StageDef_C64 StageC64;
 
 // ##############################################
@@ -126,7 +129,8 @@ typedef struct {
   int BrickPosY[12];
   int TubePosX[4];
   int TubeFire[4];
-}BackGroundElements_Def;
+} BackGroundElements_Def;
+
 extern BackGroundElements_Def BackGroundElements;
 
 // ##############################################
@@ -139,9 +143,9 @@ typedef struct {
   int StartPositionY[50][4];
   int BackgroundColour[50];
 
-  char Name[50][100];          // name of the stage (default = "noname")
+  char Name[50][100];  // name of the stage (default = "noname")
 
-  int TileType[50];            // above ground, underground, different colours...
+  int TileType[50];  // above ground, underground, different colours...
   int WarpToStage[50];
   int PlatformInUse[50];
   int PlatformX[50];
@@ -158,14 +162,16 @@ typedef struct {
   int Substage_Array[50][40][30];
   int Substage_StartPositionX[50];
   int Substage_StartPositionY[50];
-  int Substage_PlatformInUse[50];      //Platform.inUse
-  int Substage_PlatformX[50];          //Platform.Start_X
-  int Substage_PlatformY[50];          // Platform.Start_Y
+  int Substage_PlatformInUse[50];  //Platform.inUse
+  int Substage_PlatformX[50];      //Platform.Start_X
+  int Substage_PlatformY[50];      // Platform.Start_Y
   int Substage_PlatformType[50];
   int Substage_PlatformDirection[50];
-  int Substage_PlatformPathlength[50]; //Platform.End_Y = Platform.Start_Y-Substage_PlatformPathlength
+  int Substage_PlatformPathlength
+      [50];  //Platform.End_Y = Platform.Start_Y-Substage_PlatformPathlength
   int Substage_PlatformMovePos[50];
-}StageCacheDef_C64;
+} StageCacheDef_C64;
+
 extern StageCacheDef_C64 StageCache_C64;
 
 // ##############################################
@@ -180,11 +186,11 @@ extern int StagePosY;
 // ##############################################
 
 typedef struct {
-  char Name[100];          // name of the stage (default = "noname")
-  int Number;              // every stage has a number
-  int Array[256][30];      // tile array
-  int TileType;            // above ground, underground, different colours...
-  int BackgroundColour;    // background colour (blue or black)
+  char Name[100];        // name of the stage (default = "noname")
+  int Number;            // every stage has a number
+  int Array[256][30];    // tile array
+  int TileType;          // above ground, underground, different colours...
+  int BackgroundColour;  // background colour (blue or black)
   int StartPositionX[4];
   int StartPositionY[4];
   int WarpToStage;
@@ -211,6 +217,7 @@ typedef struct {
   int Substage_PlatformPathlength;
   int Substage_PlatformMovePos;
 } ImportStage_Struct;
+
 extern ImportStage_Struct ImportStage;
 
 // ##############################################
@@ -224,7 +231,8 @@ typedef struct {
   int Enemy_Direction[MAX_NUM_ENEMIES_MODULE];
   int Enemy_PosX[MAX_NUM_ENEMIES_MODULE];
   int Enemy_PosY[MAX_NUM_ENEMIES_MODULE];
-}Stage_Random_Module_Def;
+} Stage_Random_Module_Def;
+
 extern Stage_Random_Module_Def Stage_Random_Module_Outdoors[128];
 extern Stage_Random_Module_Def Stage_Random_Module_Outdoors_Exit[8];
 extern Stage_Random_Module_Def Stage_Random_Module_Indoors[128];

@@ -11,9 +11,9 @@
 #define PC_MORPH1 5
 #define PC_MORPH2 6
 
-#define PC_MODE1 0 // STARTING STRENGTH
-#define PC_MODE2 1 // PUNK
-#define PC_MODE3 2 // MORPHING INTO PUNK
+#define PC_MODE1 0  // STARTING STRENGTH
+#define PC_MODE2 1  // PUNK
+#define PC_MODE3 2  // MORPHING INTO PUNK
 #define PC_DEAD 9
 
 #define PC_MORPHING_DURATION 250
@@ -63,7 +63,7 @@ typedef struct {
   int ColHeightQuart;
   bool OnGround;
   int OnGroundDelay;
-  int OnGroundDelayMax; // MILISECONDS PLAYER CAN STILL JUMP AFTER WALKING OFF A CLIFF (USEFULL FOR "STAIRS")
+  int OnGroundDelayMax;  // MILISECONDS PLAYER CAN STILL JUMP AFTER WALKING OFF A CLIFF (USEFULL FOR "STAIRS")
   bool HitWall;
   bool JumpOnGoing;
   int Direction;

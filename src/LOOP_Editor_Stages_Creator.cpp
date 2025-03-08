@@ -5,21 +5,24 @@ Stage_Random_Module_Def Stage_Random_Module_Outdoors_Exit[8];
 Stage_Random_Module_Def Stage_Random_Module_Indoors[128];
 Stage_Random_Module_Def Stage_Random_Module_Indoors_Exit[8];
 
-
 // ##############################################
 // ##############################################
 // ##############################################
 
-void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects, bool RandomPlants, bool RandomCoins)
-{
+void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects,
+                               bool RandomPlants, bool RandomCoins) {
   int x, y;
   int RandomPlantNumber;
   int RandomPlant;
   int RandomPosition;
 
   ME.BackgroundColour = BackgroundColour;
-  if(BackgroundColour == 0){ME.TileType = 0;} // STANDARD OUTDOOR TILES
-  if(BackgroundColour == 1){ME.TileType = 1 + rand() % 3;} // ONE OF THE INDOOR COLOURS
+  if (BackgroundColour == 0) {
+    ME.TileType = 0;
+  }  // STANDARD OUTDOOR TILES
+  if (BackgroundColour == 1) {
+    ME.TileType = 1 + rand() % 3;
+  }  // ONE OF THE INDOOR COLOURS
 
   // DELETE ALL TILES
   CREATOR_Stages_Clear();
@@ -33,7 +36,7 @@ void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects, bool Ra
   //ADD SOME MODULES && EXITS
   LOOP_Editor_Stages_Create_Distribute_Modules(BackgroundColour);
 
-/*
+  /*
   // SET SOME OBJECTS
   if(RandomObjects){LOOP_Editor_Stages_Create_Distribute_Objects(BackgroundColour);}
 
@@ -71,27 +74,41 @@ void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects, bool Ra
     }
 */
 
-
   // SET SOME PLANTS
-  if(RandomPlants && BackgroundColour == 0)
-  {
-    for(x = 0; x < 20; x++)
-    {
+  if (RandomPlants && BackgroundColour == 0) {
+    for (x = 0; x < 20; x++) {
       RandomPlantNumber = rand() % 6;
       RandomPosition = rand() % 245;
-      if(RandomPlantNumber == 0){RandomPlant = 160;}
-      if(RandomPlantNumber == 1){RandomPlant = 170;}
-      if(RandomPlantNumber == 2){RandomPlant = 177;}
-      if(RandomPlantNumber == 3){RandomPlant = 181;}
-      if(RandomPlantNumber == 4){RandomPlant = 186;}
-      if(RandomPlantNumber == 5){RandomPlant = 60;}
+      if (RandomPlantNumber == 0) {
+        RandomPlant = 160;
+      }
+      if (RandomPlantNumber == 1) {
+        RandomPlant = 170;
+      }
+      if (RandomPlantNumber == 2) {
+        RandomPlant = 177;
+      }
+      if (RandomPlantNumber == 3) {
+        RandomPlant = 181;
+      }
+      if (RandomPlantNumber == 4) {
+        RandomPlant = 186;
+      }
+      if (RandomPlantNumber == 5) {
+        RandomPlant = 60;
+      }
 
-      if(TileType[ME.TileNumber[RandomPosition][27]].Solid &&
-         TileType[ME.TileNumber[RandomPosition+1][27]].Solid &&
-         TileType[ME.TileNumber[RandomPosition+ElementWidth(RandomPlant)][27]].Solid &&
-         TileType[ME.TileNumber[RandomPosition+ElementWidth(RandomPlant)-1][27]].Solid) // DON'T BUILD OVER HOLES
+      if (TileType[ME.TileNumber[RandomPosition][27]].Solid &&
+          TileType[ME.TileNumber[RandomPosition + 1][27]].Solid &&
+          TileType[ME.TileNumber[RandomPosition + ElementWidth(RandomPlant)]
+                                [27]]
+              .Solid &&
+          TileType[ME.TileNumber[RandomPosition + ElementWidth(RandomPlant) - 1]
+                                [27]]
+              .Solid)  // DON'T BUILD OVER HOLES
       {
-        LOOP_Editor_Stages_Set_Tile(RandomPlant, RandomPosition, 27-ElementHeight(RandomPlant));
+        LOOP_Editor_Stages_Set_Tile(RandomPlant, RandomPosition,
+                                    27 - ElementHeight(RandomPlant));
       }
     }
   }
@@ -102,24 +119,27 @@ void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects, bool Ra
   ME.StartPositionX_Tile[2] = 200;
   ME.StartPositionX_Tile[3] = 4;
 
-  for(x=0; x<4; x++)
-  {
+  for (x = 0; x < 4; x++) {
     y = 29;
-    while(TileType[ME.TileNumber[ME.StartPositionX_Tile[x]][y]].Solid ||
-          TileType[ME.TileNumber[ME.StartPositionX_Tile[x+1]][y]].Solid ||
-          TileType[ME.TileNumber[ME.StartPositionX_Tile[x]][y-1]].Solid ||
-          TileType[ME.TileNumber[ME.StartPositionX_Tile[x+1]][y-1]].Solid)
-   {y--;} // MAKE SURE PLAYER IS NOT INSIDE AN OBJECT
+    while (
+        TileType[ME.TileNumber[ME.StartPositionX_Tile[x]][y]].Solid ||
+        TileType[ME.TileNumber[ME.StartPositionX_Tile[x + 1]][y]].Solid ||
+        TileType[ME.TileNumber[ME.StartPositionX_Tile[x]][y - 1]].Solid ||
+        TileType[ME.TileNumber[ME.StartPositionX_Tile[x + 1]][y - 1]].Solid) {
+      y--;
+    }  // MAKE SURE PLAYER IS NOT INSIDE AN OBJECT
     ME.StartPositionY_Tile[x] = y;
-    if(ME.StartPositionY_Tile[x] > 27 ||
-       TileType[ME.TileNumber[ME.StartPositionX_Tile[x]][y]].Lethal ||
-       TileType[ME.TileNumber[ME.StartPositionX_Tile[x-1]][y]].Lethal ||
-       TileType[ME.TileNumber[ME.StartPositionX_Tile[x+1]][y]].Lethal)
-    {
+    if (ME.StartPositionY_Tile[x] > 27 ||
+        TileType[ME.TileNumber[ME.StartPositionX_Tile[x]][y]].Lethal ||
+        TileType[ME.TileNumber[ME.StartPositionX_Tile[x - 1]][y]].Lethal ||
+        TileType[ME.TileNumber[ME.StartPositionX_Tile[x + 1]][y]].Lethal) {
       ME.StartPositionY_Tile[x] = 20;
-      LOOP_Editor_Stages_Set_Tile(566, ME.StartPositionX_Tile[x]-2, ME.StartPositionY_Tile[x]+1);
-      LOOP_Editor_Stages_Set_Tile(566, ME.StartPositionX_Tile[x], ME.StartPositionY_Tile[x]+1);
-      LOOP_Editor_Stages_Set_Tile(566, ME.StartPositionX_Tile[x]+2, ME.StartPositionY_Tile[x]+1);
+      LOOP_Editor_Stages_Set_Tile(566, ME.StartPositionX_Tile[x] - 2,
+                                  ME.StartPositionY_Tile[x] + 1);
+      LOOP_Editor_Stages_Set_Tile(566, ME.StartPositionX_Tile[x],
+                                  ME.StartPositionY_Tile[x] + 1);
+      LOOP_Editor_Stages_Set_Tile(566, ME.StartPositionX_Tile[x] + 2,
+                                  ME.StartPositionY_Tile[x] + 1);
     }
   }
 }
@@ -128,10 +148,7 @@ void LOOP_Editor_Stages_Create(int BackgroundColour, bool RandomObjects, bool Ra
 // ##############################################
 // ##############################################
 
-
-
-void LOOP_Editor_Stages_Create_Distribute_Modules(int BackgroundColour)
-{
+void LOOP_Editor_Stages_Create_Distribute_Modules(int BackgroundColour) {
   int x, y, z, a;
   int ModulePosX[8];
   int NumOutdoorModules = 32;
@@ -168,153 +185,210 @@ void LOOP_Editor_Stages_Create_Distribute_Modules(int BackgroundColour)
   RandomIndoors[5] = rand() % NumIndoorModules;
   RandomIndoors[6] = rand() % NumIndoorModules;
 
-  for(y = 0; y < 30; y++)  // 30 TILES HIGH
+  for (y = 0; y < 30; y++)  // 30 TILES HIGH
   {
     for (x = 0; x < 32; x++)  // 32 TILES WIDE
     {
-      if(BackgroundColour==0 && Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit].TileNumber[x][y] != 0)
-      {
-        ME.TileNumber[ModulePosX[7]+x][y] = Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit].TileNumber[x][y];
+      if (BackgroundColour == 0 &&
+          Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit]
+                  .TileNumber[x][y] != 0) {
+        ME.TileNumber[ModulePosX[7] + x][y] =
+            Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit]
+                .TileNumber[x][y];
         // SETTING THE ENEMIES
-        for(a = 0; a < MAX_NUM_ENEMIES_MODULE; a++)
-        {
-          if(Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit].Enemy_InUse[a] == 1)
-          {
-            LOOP_Editor_Stages_Set_New_Enemy(Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit].Enemy_Type[a],
-                                             Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit].Enemy_PosX[a]+(7*32),
-                                             Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit].Enemy_PosY[a]);
+        for (a = 0; a < MAX_NUM_ENEMIES_MODULE; a++) {
+          if (Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit]
+                  .Enemy_InUse[a] == 1) {
+            LOOP_Editor_Stages_Set_New_Enemy(
+                Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit]
+                    .Enemy_Type[a],
+                Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit]
+                        .Enemy_PosX[a] +
+                    (7 * 32),
+                Stage_Random_Module_Outdoors_Exit[RandomOutdoors_Exit]
+                    .Enemy_PosY[a]);
           }
         }
       }
-      if(BackgroundColour==1 && Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit].TileNumber[x][y] != 0)
-      {
-        ME.TileNumber[ModulePosX[7]+x][y] = Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit].TileNumber[x][y];
+      if (BackgroundColour == 1 &&
+          Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit]
+                  .TileNumber[x][y] != 0) {
+        ME.TileNumber[ModulePosX[7] + x][y] =
+            Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit]
+                .TileNumber[x][y];
         // SETTING THE ENEMIES
-        for(a = 0; a < MAX_NUM_ENEMIES_MODULE; a++)
-        {
-          if(Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit].Enemy_InUse[a] == 1)
-          {
-            LOOP_Editor_Stages_Set_New_Enemy(Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit].Enemy_Type[a],
-                                             Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit].Enemy_PosX[a]+(7*32),
-                                             Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit].Enemy_PosY[a]);
+        for (a = 0; a < MAX_NUM_ENEMIES_MODULE; a++) {
+          if (Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit]
+                  .Enemy_InUse[a] == 1) {
+            LOOP_Editor_Stages_Set_New_Enemy(
+                Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit]
+                    .Enemy_Type[a],
+                Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit]
+                        .Enemy_PosX[a] +
+                    (7 * 32),
+                Stage_Random_Module_Indoors_Exit[RandomIndoors_Exit]
+                    .Enemy_PosY[a]);
           }
         }
       }
     }
   }
 
-  for(z = 0; z < 7; z++)  // 7 POSSIBLE POSITIONS
+  for (z = 0; z < 7; z++)  // 7 POSSIBLE POSITIONS
   {
-    for(y = 0; y < 30; y++)  // 30 TILES HIGH
+    for (y = 0; y < 30; y++)  // 30 TILES HIGH
     {
       for (x = 0; x < 32; x++)  // 32 TILES WIDE
       {
-        if(BackgroundColour==0 && Stage_Random_Module_Outdoors[RandomOutdoors[z]].TileNumber[x][y] != 0)
-        {
-          ME.TileNumber[ModulePosX[z]+x][y] = Stage_Random_Module_Outdoors[RandomOutdoors[z]].TileNumber[x][y];
+        if (BackgroundColour == 0 &&
+            Stage_Random_Module_Outdoors[RandomOutdoors[z]].TileNumber[x][y] !=
+                0) {
+          ME.TileNumber[ModulePosX[z] + x][y] =
+              Stage_Random_Module_Outdoors[RandomOutdoors[z]].TileNumber[x][y];
           // SETTING THE ENEMIES
-          for(a = 0; a < MAX_NUM_ENEMIES_MODULE; a++)
-          {
-            if(Stage_Random_Module_Outdoors[RandomOutdoors[z]].Enemy_InUse[a] == 1)
-            {
-              LOOP_Editor_Stages_Set_New_Enemy(Stage_Random_Module_Outdoors[RandomOutdoors[z]].Enemy_Type[a],
-                                               Stage_Random_Module_Outdoors[RandomOutdoors[z]].Enemy_PosX[a]+(z*32),
-                                               Stage_Random_Module_Outdoors[RandomOutdoors[z]].Enemy_PosY[a]);
+          for (a = 0; a < MAX_NUM_ENEMIES_MODULE; a++) {
+            if (Stage_Random_Module_Outdoors[RandomOutdoors[z]]
+                    .Enemy_InUse[a] == 1) {
+              LOOP_Editor_Stages_Set_New_Enemy(
+                  Stage_Random_Module_Outdoors[RandomOutdoors[z]].Enemy_Type[a],
+                  Stage_Random_Module_Outdoors[RandomOutdoors[z]]
+                          .Enemy_PosX[a] +
+                      (z * 32),
+                  Stage_Random_Module_Outdoors[RandomOutdoors[z]]
+                      .Enemy_PosY[a]);
             }
           }
-
         }
-        if(BackgroundColour==1 && Stage_Random_Module_Indoors[RandomIndoors[z]].TileNumber[x][y] != 0)
-        {
-          ME.TileNumber[ModulePosX[z]+x][y] = Stage_Random_Module_Indoors[RandomIndoors[z]].TileNumber[x][y];
+        if (BackgroundColour == 1 &&
+            Stage_Random_Module_Indoors[RandomIndoors[z]].TileNumber[x][y] !=
+                0) {
+          ME.TileNumber[ModulePosX[z] + x][y] =
+              Stage_Random_Module_Indoors[RandomIndoors[z]].TileNumber[x][y];
           // SETTING THE ENEMIES
-          for(a = 0; a < MAX_NUM_ENEMIES_MODULE; a++)
-          {
-            if(Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_InUse[a] == 1)
-            {
-              LOOP_Editor_Stages_Set_New_Enemy(Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_Type[a],
-                                               Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_PosX[a]+(z*32),
-                                               Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_PosY[a]);
+          for (a = 0; a < MAX_NUM_ENEMIES_MODULE; a++) {
+            if (Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_InUse[a] ==
+                1) {
+              LOOP_Editor_Stages_Set_New_Enemy(
+                  Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_Type[a],
+                  Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_PosX[a] +
+                      (z * 32),
+                  Stage_Random_Module_Indoors[RandomIndoors[z]].Enemy_PosY[a]);
             }
           }
         }
       }
     }
   }
-
 }
 
 // ##############################################
 // ##############################################
 // ##############################################
 
-void LOOP_Editor_Stages_Create_Distribute_Objects(int BackgroundColour)
-{
+void LOOP_Editor_Stages_Create_Distribute_Objects(int BackgroundColour) {
   int x;
   int RandomPosition;
   int RandomObjectNumber;
   int RandomObject;
   int HaveThisFeature = rand() % 3;
   int GroundHeight;
-  if(BackgroundColour == 0){GroundHeight = 3;}
-  if(BackgroundColour == 1){GroundHeight = 4;}
+  if (BackgroundColour == 0) {
+    GroundHeight = 3;
+  }
+  if (BackgroundColour == 1) {
+    GroundHeight = 4;
+  }
 
-  if(HaveThisFeature == 1)  // HAVE FIRE TOWERS
+  if (HaveThisFeature == 1)  // HAVE FIRE TOWERS
   {
-    for(x = 0; x < 5; x++)  // ADD SOME FIRE TOWERS
+    for (x = 0; x < 5; x++)  // ADD SOME FIRE TOWERS
     {
       RandomPosition = rand() % 225;
       RandomPosition += 10;
-      if(TileType[ME.TileNumber[RandomPosition][27]].Solid && TileType[ME.TileNumber[RandomPosition+ElementWidth(514)][27]].Solid) // DON'T BUILD OVER HOLES
+      if (TileType[ME.TileNumber[RandomPosition][27]].Solid &&
+          TileType[ME.TileNumber[RandomPosition + ElementWidth(514)][27]]
+              .Solid)  // DON'T BUILD OVER HOLES
       {
         bool CanBeBuilt = true;
-        if(!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition, 27-GroundHeight)){CanBeBuilt = false;}
-        if(!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition, 27-GroundHeight-3)){CanBeBuilt = false;}
-        if(!LOOP_Editor_Stages_Room_For_Object(6, RandomPosition+1, 27-GroundHeight-5)){CanBeBuilt = false;}
-        if(CanBeBuilt)
-        {
-          LOOP_Editor_Stages_Set_Tile(514, RandomPosition, 27-GroundHeight);
-          LOOP_Editor_Stages_Set_Tile(514, RandomPosition, 27-GroundHeight-3);
-          LOOP_Editor_Stages_Set_Tile(6, RandomPosition+1, 27-GroundHeight-5);
+        if (!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition,
+                                                27 - GroundHeight)) {
+          CanBeBuilt = false;
+        }
+        if (!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition,
+                                                27 - GroundHeight - 3)) {
+          CanBeBuilt = false;
+        }
+        if (!LOOP_Editor_Stages_Room_For_Object(6, RandomPosition + 1,
+                                                27 - GroundHeight - 5)) {
+          CanBeBuilt = false;
+        }
+        if (CanBeBuilt) {
+          LOOP_Editor_Stages_Set_Tile(514, RandomPosition, 27 - GroundHeight);
+          LOOP_Editor_Stages_Set_Tile(514, RandomPosition,
+                                      27 - GroundHeight - 3);
+          LOOP_Editor_Stages_Set_Tile(6, RandomPosition + 1,
+                                      27 - GroundHeight - 5);
         }
       }
     }
   }
 
-  for(x = 0; x < 5; x++) // ADD SOME TOWERS
+  for (x = 0; x < 5; x++)  // ADD SOME TOWERS
   {
     RandomPosition = rand() % 225;
     RandomPosition += 10;
-    if(TileType[ME.TileNumber[RandomPosition][27]].Solid && TileType[ME.TileNumber[RandomPosition+ElementWidth(514)][27]].Solid) // DON'T BUILD OVER HOLES
+    if (TileType[ME.TileNumber[RandomPosition][27]].Solid &&
+        TileType[ME.TileNumber[RandomPosition + ElementWidth(514)][27]]
+            .Solid)  // DON'T BUILD OVER HOLES
     {
       bool CanBeBuilt = true;
-      if(!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition, 27-GroundHeight)){CanBeBuilt = false;}
-      if(!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition, 27-GroundHeight-3)){CanBeBuilt = false;}
-      if(CanBeBuilt)
-      {
-        LOOP_Editor_Stages_Set_Tile(514, RandomPosition, 27-GroundHeight);
-        LOOP_Editor_Stages_Set_Tile(514, RandomPosition, 27-GroundHeight-3);
+      if (!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition,
+                                              27 - GroundHeight)) {
+        CanBeBuilt = false;
+      }
+      if (!LOOP_Editor_Stages_Room_For_Object(514, RandomPosition,
+                                              27 - GroundHeight - 3)) {
+        CanBeBuilt = false;
+      }
+      if (CanBeBuilt) {
+        LOOP_Editor_Stages_Set_Tile(514, RandomPosition, 27 - GroundHeight);
+        LOOP_Editor_Stages_Set_Tile(514, RandomPosition, 27 - GroundHeight - 3);
       }
     }
   }
 
-  for(x = 0; x < 20; x++) // ADD SOME RANDOM OBJECTS
+  for (x = 0; x < 20; x++)  // ADD SOME RANDOM OBJECTS
   {
     RandomObjectNumber = rand() % 6;
     RandomPosition = rand() % 225;
     RandomPosition += 10;
-    if(RandomObjectNumber == 0){RandomObject = 16;}
-    if(RandomObjectNumber == 1){RandomObject = 511;}
-    if(RandomObjectNumber == 2){RandomObject = 50;}
-    if(RandomObjectNumber == 3){RandomObject = 32;}
-    if(RandomObjectNumber == 4){RandomObject = 587;}
-    if(RandomObjectNumber == 5){RandomObject = 678;}
+    if (RandomObjectNumber == 0) {
+      RandomObject = 16;
+    }
+    if (RandomObjectNumber == 1) {
+      RandomObject = 511;
+    }
+    if (RandomObjectNumber == 2) {
+      RandomObject = 50;
+    }
+    if (RandomObjectNumber == 3) {
+      RandomObject = 32;
+    }
+    if (RandomObjectNumber == 4) {
+      RandomObject = 587;
+    }
+    if (RandomObjectNumber == 5) {
+      RandomObject = 678;
+    }
 
-    if(TileType[ME.TileNumber[RandomPosition][27]].Solid &&
-       TileType[ME.TileNumber[RandomPosition+1][27]].Solid &&
-       TileType[ME.TileNumber[RandomPosition+ElementWidth(RandomObject)][27]].Solid) // DON'T BUILD OVER HOLES
+    if (TileType[ME.TileNumber[RandomPosition][27]].Solid &&
+        TileType[ME.TileNumber[RandomPosition + 1][27]].Solid &&
+        TileType[ME.TileNumber[RandomPosition + ElementWidth(RandomObject)][27]]
+            .Solid)  // DON'T BUILD OVER HOLES
     {
-      LOOP_Editor_Stages_Set_Tile(RandomObject, RandomPosition, 27-ElementHeight(RandomObject)-GroundHeight+3);
+      LOOP_Editor_Stages_Set_Tile(
+          RandomObject, RandomPosition,
+          27 - ElementHeight(RandomObject) - GroundHeight + 3);
     }
   }
 }
@@ -322,4 +396,3 @@ void LOOP_Editor_Stages_Create_Distribute_Objects(int BackgroundColour)
 // ##############################################
 // ##############################################
 // ##############################################
-

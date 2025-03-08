@@ -10,8 +10,6 @@
 #define RESOLUTION_800x600 20
 #define RESOLUTION_1280x720 30
 
-
-
 // ##############################################
 // ##############################################
 // ##############################################
@@ -58,7 +56,7 @@ typedef struct {
   char BGM_Indoors[128];
 } Def_FileNames;
 
-extern Def_FileNames FileName; // FILENAME BUFFERS
+extern Def_FileNames FileName;  // FILENAME BUFFERS
 
 // ##############################################
 // ##############################################
