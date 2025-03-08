@@ -69,6 +69,23 @@ src/PLAYER_Run.cpp
 src/main.cpp
 )
 
+find_program(CLANG_FORMAT_BIN clang-format-18)
+if (CLANG_FORMAT_BIN)
+    message(STATUS "Found clang-format at ${CLANG_FORMAT_BIN}")
+
+    # Gather all your source files. For example:
+    file(GLOB_RECURSE ALL_SOURCE_FILES 
+        "${CMAKE_SOURCE_DIR}/src/*.cpp"
+        "${CMAKE_SOURCE_DIR}/src/*.h"
+    )
+
+    # Custom target: "format"
+    add_custom_target(format
+        COMMAND ${CLANG_FORMAT_BIN} -i ${ALL_SOURCE_FILES}
+        COMMENT "Running clang-format on source files"
+    )
+endif()
+
 add_executable(openggs ${SOURCE_FILES})
 
 target_link_libraries(openggs ${SDL2_LIBRARY}
