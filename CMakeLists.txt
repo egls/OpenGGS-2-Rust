@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.7)
 project(OpenGGS)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Adjust the checks, warning settings, etc. as you prefer:
+    set(CMAKE_CXX_CLANG_TIDY 
+        "clang-tidy"
+    )
+    message(STATUS "clang-tidy set:  ${CMAKE_CXX_CLANG_TIDY}")
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${OpenGGS_SOURCE_DIR}/cmake")
 
 find_package(SDL2 REQUIRED)
@@ -68,6 +76,23 @@ src/LOOP_Options.cpp
 src/PLAYER_Run.cpp
 src/main.cpp
 )
+
+find_program(CLANG_FORMAT_BIN clang-format-18)
+if (CLANG_FORMAT_BIN)
+    message(STATUS "Found clang-format at ${CLANG_FORMAT_BIN}")
+
+    # Gather all your source files. For example:
+    file(GLOB_RECURSE ALL_SOURCE_FILES 
+        "${CMAKE_SOURCE_DIR}/src/*.cpp"
+        "${CMAKE_SOURCE_DIR}/src/*.h"
+    )
+
+    # Custom target: "format"
+    add_custom_target(format
+        COMMAND ${CLANG_FORMAT_BIN} -i ${ALL_SOURCE_FILES}
+        COMMENT "Running clang-format on source files"
+    )
+endif()
 
 add_executable(openggs ${SOURCE_FILES})
 

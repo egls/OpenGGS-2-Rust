@@ -108,6 +108,7 @@ typedef struct {
   bool DropStone;
   bool WarpStone;
 } TileTypesDefinition;
+
 extern TileTypesDefinition TileType[NUMBER_OF_TILES];
 
 // ##############################################
@@ -121,6 +122,7 @@ typedef struct {
   float RunVelocity;
   bool Active;
 } Sprite_SmallCoinDefinition;
+
 extern Sprite_SmallCoinDefinition Sprite_SmallCoin[20];
 
 // ##############################################
@@ -141,6 +143,7 @@ typedef struct {
   bool OnGround;
   int Direction;
 } Sprite_PowerUp_Definition;
+
 extern Sprite_PowerUp_Definition Sprite_PowerUp[10];
 
 // ##############################################
@@ -164,6 +167,7 @@ typedef struct {
   int ExplosionY;
   int ExplosionDuraion;
 } Sprite_Bullet_Definition;
+
 extern Sprite_Bullet_Definition Sprite_Bullet;
 
 // ##############################################
@@ -184,6 +188,7 @@ typedef struct {
   int Direction;
   bool inUse;
 } Platform_Definition;
+
 extern Platform_Definition Platform;
 
 // ##############################################
@@ -200,6 +205,7 @@ typedef struct {
   bool inUse;
   int JumpVelocity;
 } DropStone_Definition;
+
 extern DropStone_Definition Sprite_DropStone[30];
 
 // ##############################################

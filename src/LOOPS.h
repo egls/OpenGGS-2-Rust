@@ -35,6 +35,7 @@ typedef struct {
   int x_off;
   int y_off;
 } Text_Offset_Def;
+
 extern Text_Offset_Def Credits;
 extern Text_Offset_Def Story;
 extern Text_Offset_Def Splashscreen;
@@ -46,6 +47,7 @@ typedef struct {
   int y_off;
   int MenuPosition;
 } Options_Def;
+
 extern Options_Def Options;
 
 // ##############################################

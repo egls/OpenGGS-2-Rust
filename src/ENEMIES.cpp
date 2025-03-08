@@ -8,16 +8,14 @@ Enemy_Def Enemy[MAX_NUM_ENEMIES];
 // ##############################################
 // ##############################################
 
-void ENEMIES_Define()
-{
+void ENEMIES_Define() {
   int x, y;
 
   EV.Frame = 0;
 
   // RESET ENEMIES
-  for(x=0; x<MAX_NUM_ENEMIES; x++)
-  {
-    Enemy[x].PosX = x*25;
+  for (x = 0; x < MAX_NUM_ENEMIES; x++) {
+    Enemy[x].PosX = x * 25;
     Enemy[x].PosY = 100;
     Enemy[x].Direction = NPC_RIGHT;
     Enemy[x].Type = 1;
@@ -27,7 +25,6 @@ void ENEMIES_Define()
     Enemy[x].JumpVelocity = 0;
     Enemy[x].Active = false;
   }
-
 
   // LOADING ENEMIES' DIMENSIONS
   //  1 = OWL
@@ -47,67 +44,103 @@ void ENEMIES_Define()
   // 15 = PIPE
   FILE* stagefile;
   Uint32 temparray[690];  // 15*46
-  stagefile = fopen(FileName.EnemiesDefinition,  "r");
-  if (stagefile == NULL)
-  {
-    fprintf(stderr,"PLAYER DIMENSIONS NOT FOUND!!!");
-  }
-  else
-  {
-    for (x = 0; x < 690; x++){fscanf(stagefile, "%i,", &temparray[x]);}
+  stagefile = fopen(FileName.EnemiesDefinition, "r");
+  if (stagefile == NULL) {
+    fprintf(stderr, "PLAYER DIMENSIONS NOT FOUND!!!");
+  } else {
+    for (x = 0; x < 690; x++) {
+      fscanf(stagefile, "%i,", &temparray[x]);
+    }
     x = 0;
 
-    for(y=1; y<16; y++)
-    {
+    for (y = 1; y < 16; y++) {
       Enemy_Type[y].JumpStrength = 0;
       Enemy_Type[y].Flying = false;
       Enemy_Type[y].FallOfCliffs = false;
       Enemy_Type[y].Walker = true;
       Enemy_Type[y].RunStrength = 10;
-      Enemy_Type[y].ColWidth = temparray[x]; x++;
-      Enemy_Type[y].ColHeight = temparray[x]; x++;
+      Enemy_Type[y].ColWidth = temparray[x];
+      x++;
+      Enemy_Type[y].ColHeight = temparray[x];
+      x++;
       Enemy_Type[y].Stompable = true;
       Enemy_Type[y].Shootable = true;
       Enemy_Type[y].SpecialPath_Dragon = false;
       Enemy_Type[y].SpecialPath_Spider = false;
 
-      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x]; x++;
-      x+=8; // TWO MORE FRAMES NOT YET IMPLEMENTED
+      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_RIGHT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_DEAD][NPC_DEAD][NPC_DEAD] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME1][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME2][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME3][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameX[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameY[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameW[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      Enemy_Type[y].FrameH[NPC_LEFT][NPC_FRAME4][NPC_ALIVE] = temparray[x];
+      x++;
+      x += 8;  // TWO MORE FRAMES NOT YET IMPLEMENTED
     }
   }
   fclose(stagefile);
@@ -163,44 +196,78 @@ void ENEMIES_Define()
   Enemy_Type[15].Stompable = false;
   Enemy_Type[15].Shootable = false;
 
-  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
 
-  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME1][NPC_ALIVE];
 
-  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameW[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameW[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameH[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameH[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
 
-  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
-  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
-  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
-  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] = Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME5][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME3][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME6][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME2][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME7][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameX[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameX[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
+  Enemy_Type[15].FrameY[NPC_LEFT][NPC_FRAME8][NPC_ALIVE] =
+      Enemy_Type[15].FrameY[NPC_RIGHT][NPC_FRAME1][NPC_ALIVE];
 
   // DEFINE  ColWidthHalf
-  for(y=1;y<17;y++){Enemy_Type[y].ColWidthHalf = (int)(Enemy_Type[y].ColWidth/2);}
+  for (y = 1; y < 17; y++) {
+    Enemy_Type[y].ColWidthHalf = (int)(Enemy_Type[y].ColWidth / 2);
+  }
 }
 
 // ##############################################

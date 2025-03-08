@@ -12,11 +12,11 @@
 #define NPC_ALIVE 0
 #define NPC_DEAD 1
 
-#define NPC_TYPE_OWL 1   // -> does NOT stop at edges
-#define NPC_TYPE_EYE 2   // -> does NOT stop at edges
-#define NPC_TYPE_JELLY 3 // -> stops at edges
-#define NPC_TYPE_CRAB 4  // -> stops at edges
-#define NPC_TYPE_BEE 5   // -> flies
+#define NPC_TYPE_OWL 1    // -> does NOT stop at edges
+#define NPC_TYPE_EYE 2    // -> does NOT stop at edges
+#define NPC_TYPE_JELLY 3  // -> stops at edges
+#define NPC_TYPE_CRAB 4   // -> stops at edges
+#define NPC_TYPE_BEE 5    // -> flies
 #define NPC_TYPE_BUG 6
 #define NPC_TYPE_BALL 7
 #define NPC_TYPE_HOOK1 8
@@ -27,7 +27,7 @@
 #define NPC_TYPE_SPIDER 13
 #define NPC_TYPE_PIRANHA 14
 #define NPC_TYPE_PIPE 15
-#define NPC_TYPE_FIRECIRCLE 16 // NOT IN ORIGINAL GAME
+#define NPC_TYPE_FIRECIRCLE 16  // NOT IN ORIGINAL GAME
 
 void ENEMY_Change_Direction(int EnemyNumber);
 void ENEMY_Check_Tilecollision(int EnemyNumber);

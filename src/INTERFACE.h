@@ -40,6 +40,7 @@ typedef struct {
   int ActiveFileLoad;
   int Cols;
 } Menu_Def;
+
 extern Menu_Def Menu;
 
 // ##############################################
@@ -60,4 +61,5 @@ typedef struct {
   int SmallCoinX;
   int SmallCoinY;
 } HUD_Def;
+
 extern HUD_Def HUD;

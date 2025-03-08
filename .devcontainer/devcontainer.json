@@ -1,0 +1,32 @@
+{
+	"name": "OpenGGS-2-Rust",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"runArgs": [
+		"--cap-add=SYS_PTRACE",
+		"--security-opt",
+		"seccomp=unconfined"
+	],
+	"customizations": {
+		"vscode": {
+			"settings": {},
+			"extensions": [
+				"ms-vscode.cpptools",
+				"ms-vscode.cmake-tools",
+				"vadimcn.vscode-lldb",
+				"cheshirekow.cmake-format",
+				"ms-vscode.cpptools-extension-pack"
+			],
+			"features": {
+				"terraform": "latest",
+				"desktop-lite": {
+					"password": "vscode",
+					"webPort": "6080",
+					"vncPort": "5901"
+				}
+			}
+			// after start addPort in vscode: 5901 for vnc, 6080 for web
+		}
+	}
+}
