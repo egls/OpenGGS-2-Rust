@@ -34,22 +34,30 @@ FetchContent_Declare(
 
 # Disable AVIF support (which uses dav1d)
 
-
+# Before FetchContent_MakeAvailable(SDL2_mixer):
+set(MUSIC_OPUS OFF CACHE BOOL "Disable Opus in SDL2_mixer" FORCE)
+set(MUSIC_MP3_SMPEG OFF CACHE BOOL "Disable SMPEG-based MP3" FORCE)
+set(MUSIC_MPG123 OFF CACHE BOOL "Disable mpg123-based MP3" FORCE)
+set(MIXER_TEST OFF CACHE BOOL "Disable building SDL2_mixer test" FORCE)
+set(SDL2MIXER_OPUS OFF CACHE BOOL "Disable building SDL2MIXER_OPUS" FORCE)
+set(SDL2MIXER_MOD OFF CACHE BOOL "Disable building SDL2MIXER_MOD" FORCE)
+set(SDL2MIXER_MOD_XMP OFF CACHE BOOL "Disable building SDL2MIXER_MOD_XMP" FORCE)
+set(MIXER_TEST OFF CACHE BOOL "Disable building SDL2_mixer test" FORCE)
+set(SDL2MIXER_MIDI_FLUIDSYNTH OFF CACHE BOOL "Disable SDL2MIXER_MIDI_FLUIDSYNTH in SDL2_mixer" FORCE)
+set(SDL2MIXER_WAVPACK OFF CACHE BOOL "Disable building SDL2MIXER_WAVPACK" FORCE)
 # --- Fetch & build SDL2_mixer ---
 FetchContent_Declare(
   SDL2_mixer
   GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
   GIT_TAG release-2.8.1
 )
-set(MUSIC_MP3_SMPEG OFF CACHE BOOL "Disable SMPEG-based MP3" FORCE)
-set(MUSIC_MPG123 OFF CACHE BOOL "Disable mpg123-based MP3" FORCE)
-set(MIXER_TEST OFF CACHE BOOL "Disable building SDL2_mixer test" FORCE)
+
 
 # 3) Fetch (clone) and build SDL2, SDL2_image, and SDL2_mixer
 FetchContent_MakeAvailable(SDL2 SDL2_image SDL2_mixer)
 
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "__Clang")
     # Adjust the checks, warning settings, etc. as you prefer:
     set(CMAKE_CXX_CLANG_TIDY 
         "clang-tidy"
