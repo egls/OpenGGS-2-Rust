@@ -12,3 +12,5 @@ my_stdout.txt
 test.txt
 openggs
 .idea/
+*.exe
+*.dll
