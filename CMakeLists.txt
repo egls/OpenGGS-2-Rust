@@ -109,6 +109,7 @@ corrosion_import_crate(MANIFEST_PATH rust-lib/Cargo.toml)
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 set(SOURCE_FILES
+src/rust_sdl_bridge.h
 src/ANIMATION.cpp
 src/GRAPHICS_Sprites_Draw.cpp
 src/LOOP_Editor_Stages_Creator_Functions.cpp
@@ -200,12 +201,48 @@ target_link_libraries(openggs ${SDL2_LIBRARY}
                              ${SDL2_MIXER_LIBRARIES})
 endif()
 
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# Add a custom command to build the Rust library:
+message("Building Rust sdl2 bridge")
+add_custom_command(
+    # TODO: change for linux to .a
+    OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/rust_sdl_bridge.lib
+    COMMAND cargo build --release
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge
+    COMMENT "Building Rust sdl2 bridge"
+)
+
+# Create an IMPORTED library target to represent the Rust static library:
+add_library(rust_sdl_bridge STATIC IMPORTED)
+set_target_properties(rust_sdl_bridge PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/rust_sdl_bridge.lib"
+)
+
+# Make sure our C++ target depends on building the Rust library first:
+add_dependencies(openggs rust_sdl_bridge)
+if(WIN32)
+    target_link_libraries(openggs
+        PRIVATE
+        rust_sdl_bridge
+        # Link ntdll for the NtXxx calls:
+        ntdll
+        # Also link typical Windows libs if you get other missing symbols:
+        ws2_32
+        userenv
+        advapi32
+        shell32
+    )
+endif()
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 target_link_libraries(openggs
     PRIVATE
         SDL2::SDL2
         SDL2::SDL2main    # needed on Windows
         SDL2_image
         SDL2_mixer
+       
 
 )
 #------------------------------------------------------------------------------

@@ -1,0 +1,10 @@
+[package]
+name = "rust_sdl_bridge"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sdl2 = "0.37.0"
+
+[lib]
+crate-type = ["staticlib"]  # or "cdylib" for a shared library
