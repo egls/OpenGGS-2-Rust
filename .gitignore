@@ -16,3 +16,7 @@ openggs
 *.dll
 openggs.pdb
 Options.oi
+
+# rust stuff
+target/
+Cargo.lock 
