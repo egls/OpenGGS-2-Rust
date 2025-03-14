@@ -14,3 +14,9 @@ openggs
 .idea/
 *.exe
 *.dll
+openggs.pdb
+Options.oi
+
+# rust stuff
+target/
+Cargo.lock 

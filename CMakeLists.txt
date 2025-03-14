@@ -1,12 +1,34 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15)
 project(OpenGGS LANGUAGES CXX)
 
 # Optionally set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${OpenGGS_SOURCE_DIR}/cmake")
+
+# Define a CMake option that defaults to OFF
+option(ENABLE_CLANG_TIDY "Enable clang-tidy checks" OFF)
 
 include(FetchContent)
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(SDL2 REQUIRED)
+    find_package(SDL2_image REQUIRED)
+    find_package(SDL2_mixer REQUIRED)
+
+    include_directories(${SDL2_INCLUDE_DIR}
+                        ${SDL2_IMAGE_INCLUDE_DIR}
+                        ${SDL2_MIXER_INCLUDE_DIR})
+endif()
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Declare SDL2 
 FetchContent_Declare(
   SDL2
@@ -32,8 +54,6 @@ FetchContent_Declare(
   GIT_TAG release-2.8.8
 )
 
-# Disable AVIF support (which uses dav1d)
-
 # Before FetchContent_MakeAvailable(SDL2_mixer):
 set(MUSIC_OPUS OFF CACHE BOOL "Disable Opus in SDL2_mixer" FORCE)
 set(MUSIC_MP3_SMPEG OFF CACHE BOOL "Disable SMPEG-based MP3" FORCE)
@@ -52,32 +72,42 @@ FetchContent_Declare(
   GIT_TAG release-2.8.1
 )
 
-
 # 3) Fetch (clone) and build SDL2, SDL2_image, and SDL2_mixer
 FetchContent_MakeAvailable(SDL2 SDL2_image SDL2_mixer)
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "__Clang")
-    # Adjust the checks, warning settings, etc. as you prefer:
-    set(CMAKE_CXX_CLANG_TIDY 
-        "clang-tidy"
-    )
-    message(STATUS "clang-tidy set:  ${CMAKE_CXX_CLANG_TIDY}")
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+if(ENABLE_CLANG_TIDY)
+    message(STATUS "clang-tidy checks enabled")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        # Adjust the checks, warning settings, etc. as you prefer:
+        set(CMAKE_CXX_CLANG_TIDY    
+            "clang-tidy"
+        )
+        message(STATUS "clang-tidy set:  ${CMAKE_CXX_CLANG_TIDY}")
+    endif()
 endif()
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${OpenGGS_SOURCE_DIR}/cmake")
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# Add Corrosion as a dependency
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5 # Optionally specify a commit hash, version tag or branch here
+)
+FetchContent_MakeAvailable(Corrosion)
+# Import targets defined in a package or workspace manifest `Cargo.toml` file
+corrosion_import_crate(MANIFEST_PATH rust-lib/Cargo.toml)
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(SDL2 REQUIRED)
-    find_package(SDL2_image REQUIRED)
-    find_package(SDL2_mixer REQUIRED)
-
-    include_directories(${SDL2_INCLUDE_DIR}
-                        ${SDL2_IMAGE_INCLUDE_DIR}
-                        ${SDL2_MIXER_INCLUDE_DIR})
-endif()
-
-
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 set(SOURCE_FILES
 src/ANIMATION.cpp
 src/GRAPHICS_Sprites_Draw.cpp
@@ -135,7 +165,11 @@ src/LOOP_Options.cpp
 src/PLAYER_Run.cpp
 src/main.cpp
 )
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 find_program(CLANG_FORMAT_BIN clang-format-18)
 if (CLANG_FORMAT_BIN)
     message(STATUS "Found clang-format at ${CLANG_FORMAT_BIN}")
@@ -153,6 +187,11 @@ if (CLANG_FORMAT_BIN)
     )
 endif()
 
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 add_executable(openggs ${SOURCE_FILES})
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -169,3 +208,5 @@ target_link_libraries(openggs
         SDL2_mixer
 
 )
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
