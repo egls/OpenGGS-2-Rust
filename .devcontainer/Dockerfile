@@ -12,6 +12,7 @@ USER root
 # Install development packages: Clang, Clang-Tidy, SDL2, etc.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        ca-certificates \
         build-essential \
         clang \
         clang-tidy \
@@ -22,11 +23,10 @@ RUN apt-get update && \
         cmake \
         bash-completion \
         vim \
-        git \
-        libsdl2-dev \
-        libsdl2-image-dev \
-        libsdl2-mixer-dev && \
-    rm -rf /var/lib/apt/lists/*
+        git && \
+    rm -rf /var/lib/apt/lists/* && \ 
+        update-ca-certificates
+
 
 # Optionally set Clang as the default compiler
 ENV CC=clang
@@ -35,6 +35,15 @@ ENV CXX=clang++
 # Switch to openggs user and set working directory
 USER openggs
 WORKDIR /home/openggs
+
+# 4) Install Rust as openggs (it will go into /home/openggs/.cargo)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# 5) Update PATH for the rest of the Docker build
+ENV PATH="/home/openggs/.cargo/bin:${PATH}"
+
+# Verify that rustc is now found
+RUN rustc --version
 
 # Install Git prompt script for a nicer shell experience
 # RUN curl -L https://raw.github.com/git/git/master/contrib/completion/git-prompt.sh > ~/.bash_git && \
