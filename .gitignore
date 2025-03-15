@@ -14,6 +14,7 @@ openggs
 .idea/
 *.exe
 *.dll
+*.lib
 openggs.pdb
 Options.oi
 
