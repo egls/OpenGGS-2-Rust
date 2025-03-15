@@ -10,34 +10,30 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${OpenGGS_SOURCE_DIR}/cmake")
 option(ENABLE_CLANG_TIDY "Enable clang-tidy checks" OFF)
 
 include(FetchContent)
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
+set(FETCHCONTENT_QUIET OFF)
+set(FETCHCONTENT_UPDATES_DISCONNECTED OFF)
 
 #------------------------------------------------------------------------------
+# SDL2
 #------------------------------------------------------------------------------
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(SDL2 REQUIRED)
-    find_package(SDL2_image REQUIRED)
-    find_package(SDL2_mixer REQUIRED)
-
-    include_directories(${SDL2_INCLUDE_DIR}
-                        ${SDL2_IMAGE_INCLUDE_DIR}
-                        ${SDL2_MIXER_INCLUDE_DIR})
-endif()
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-# Declare SDL2 
 FetchContent_Declare(
   SDL2
   GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
   GIT_TAG release-2.32.2
 )
+FetchContent_MakeAvailable(SDL2)
 
 # Disable building SDL2 tests, if desired
 set(SDL_TEST OFF CACHE BOOL "Do not build SDL2_test" FORCE)
+
+#------------------------------------------------------------------------------
+# SDL2_image
+#------------------------------------------------------------------------------
+FetchContent_Declare(
+  SDL2_image
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
+  GIT_TAG release-2.8.8
+)
 
 # Optionally disable tests or set build options
 set(SUPPORT_AVIF OFF CACHE BOOL "Disable AVIF support" FORCE)
@@ -45,16 +41,19 @@ set(SDL2IMAGE_AVIF OFF CACHE BOOL "Disable TIFF support in SDL2_image" FORCE)
 set(SUPPORT_WEBP OFF CACHE BOOL "Disable WEBP support" FORCE)
 set(SUPPORT_TIFF OFF CACHE BOOL "Disable TIFF support in SDL2_image" FORCE)
 set(SDL2IMAGE_TIF OFF CACHE BOOL "Disable TIFF support in SDL2_image" FORCE)
-
 set(IMAGE_TEST OFF CACHE BOOL "Disable building SDL2_image test" FORCE)
-# --- Fetch & build SDL2_image ---
+
+FetchContent_MakeAvailable(SDL2_image)
+
+#------------------------------------------------------------------------------
+# SDL2_mixer
+#------------------------------------------------------------------------------
 FetchContent_Declare(
-  SDL2_image
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
-  GIT_TAG release-2.8.8
+  SDL2_mixer
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
+  GIT_TAG release-2.8.1
 )
 
-# Before FetchContent_MakeAvailable(SDL2_mixer):
 set(MUSIC_OPUS OFF CACHE BOOL "Disable Opus in SDL2_mixer" FORCE)
 set(MUSIC_MP3_SMPEG OFF CACHE BOOL "Disable SMPEG-based MP3" FORCE)
 set(MUSIC_MPG123 OFF CACHE BOOL "Disable mpg123-based MP3" FORCE)
@@ -65,19 +64,14 @@ set(SDL2MIXER_MOD_XMP OFF CACHE BOOL "Disable building SDL2MIXER_MOD_XMP" FORCE)
 set(MIXER_TEST OFF CACHE BOOL "Disable building SDL2_mixer test" FORCE)
 set(SDL2MIXER_MIDI_FLUIDSYNTH OFF CACHE BOOL "Disable SDL2MIXER_MIDI_FLUIDSYNTH in SDL2_mixer" FORCE)
 set(SDL2MIXER_WAVPACK OFF CACHE BOOL "Disable building SDL2MIXER_WAVPACK" FORCE)
-# --- Fetch & build SDL2_mixer ---
-FetchContent_Declare(
-  SDL2_mixer
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
-  GIT_TAG release-2.8.1
-)
 
-# 3) Fetch (clone) and build SDL2, SDL2_image, and SDL2_mixer
-FetchContent_MakeAvailable(SDL2 SDL2_image SDL2_mixer)
+
+FetchContent_MakeAvailable(SDL2_mixer)
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
+# Clang-Tidy
 #------------------------------------------------------------------------------
 if(ENABLE_CLANG_TIDY)
     message(STATUS "clang-tidy checks enabled")
@@ -93,20 +87,21 @@ endif()
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
+# Corrosion
 #------------------------------------------------------------------------------
-# Add Corrosion as a dependency
-FetchContent_Declare(
-    Corrosion
-    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-    GIT_TAG v0.5 # Optionally specify a commit hash, version tag or branch here
-)
-FetchContent_MakeAvailable(Corrosion)
+#FetchContent_Declare(
+#    Corrosion
+#    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+#    GIT_TAG v0.5 # Optionally specify a commit hash, version tag or branch here
+#)
+#FetchContent_MakeAvailable(Corrosion)
 # Import targets defined in a package or workspace manifest `Cargo.toml` file
-corrosion_import_crate(MANIFEST_PATH rust-lib/Cargo.toml)
+#corrosion_import_crate(MANIFEST_PATH rust-lib/Cargo.toml)
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
+# Source files
 #------------------------------------------------------------------------------
 set(SOURCE_FILES
 src/rust_sdl_bridge.h
@@ -168,8 +163,11 @@ src/main.cpp
 )
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
+add_executable(openggs ${SOURCE_FILES})
+
 
 #------------------------------------------------------------------------------
+# Clang-Format
 #------------------------------------------------------------------------------
 find_program(CLANG_FORMAT_BIN clang-format-18)
 if (CLANG_FORMAT_BIN)
@@ -187,24 +185,51 @@ if (CLANG_FORMAT_BIN)
         COMMENT "Running clang-format on source files"
     )
 endif()
-
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
+# Linux
 #------------------------------------------------------------------------------
-add_executable(openggs ${SOURCE_FILES})
-
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-target_link_libraries(openggs ${SDL2_LIBRARY}
-                             ${SDL2_IMAGE_LIBRARIES}
-                             ${SDL2_MIXER_LIBRARIES})
+
+add_custom_command(
+    # TODO: change for linux to .a
+    OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/librust_sdl_bridge.a
+    COMMAND cargo build --release
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge
+    COMMENT "Building Rust sdl2 bridge"
+)
+
+# Create an IMPORTED library target to represent the Rust static library:
+add_library(rust_sdl_bridge STATIC IMPORTED)
+set_target_properties(rust_sdl_bridge PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/librust_sdl_bridge.a"
+)
+
+# Make sure our C++ target depends on building the Rust library first:
+add_dependencies(openggs rust_sdl_bridge)
+
+# 3) Manually add the SDL2 include path
+target_include_directories(openggs PRIVATE
+  "${SDL2_SOURCE_DIR}/include"
+  "${SDL2_image_SOURCE_DIR}/include"
+  "${SDL2_mixer_SOURCE_DIR}/include"
+)
+
+target_link_libraries(openggs PRIVATE 
+                            SDL2::SDL2
+                            SDL2_image::SDL2_image
+                            SDL2_mixer::SDL2_mixer
+                            rust_sdl_bridge)
+                            
 endif()
 
+
 #------------------------------------------------------------------------------
+# Windows
 #------------------------------------------------------------------------------
-# Add a custom command to build the Rust library:
-message("Building Rust sdl2 bridge")
+if(WIN32)
 add_custom_command(
     # TODO: change for linux to .a
     OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/rust_sdl_bridge.lib
@@ -221,7 +246,7 @@ set_target_properties(rust_sdl_bridge PROPERTIES
 
 # Make sure our C++ target depends on building the Rust library first:
 add_dependencies(openggs rust_sdl_bridge)
-if(WIN32)
+
     target_link_libraries(openggs
         PRIVATE
         rust_sdl_bridge
@@ -232,18 +257,11 @@ if(WIN32)
         userenv
         advapi32
         shell32
-    )
-endif()
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-target_link_libraries(openggs
-    PRIVATE
         SDL2::SDL2
         SDL2::SDL2main    # needed on Windows
         SDL2_image
         SDL2_mixer
-       
-
-)
+    )
+endif()
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
