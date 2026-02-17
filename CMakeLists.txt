@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${OpenGGS_SOURCE_DIR}/cmake")
 
+if (WIN32)
+    set(Rust_CARGO_TARGET "x86_64-pc-windows-gnu" CACHE STRING "Rust target triple" FORCE)
+    set(Rust_CARGO_TARGET_CACHED "x86_64-pc-windows-gnu" CACHE STRING "Rust target triple cached" FORCE)
+endif()
+
 # Define a CMake option that defaults to OFF
 option(ENABLE_CLANG_TIDY "Enable clang-tidy checks" OFF)
 
@@ -89,14 +94,15 @@ endif()
 #------------------------------------------------------------------------------
 # Corrosion
 #------------------------------------------------------------------------------
-#FetchContent_Declare(
-#    Corrosion
-#    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-#    GIT_TAG v0.5 # Optionally specify a commit hash, version tag or branch here
-#)
-#FetchContent_MakeAvailable(Corrosion)
-# Import targets defined in a package or workspace manifest `Cargo.toml` file
-#corrosion_import_crate(MANIFEST_PATH rust-lib/Cargo.toml)
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5
+)
+FetchContent_MakeAvailable(Corrosion)
+
+set(RUST_BRIDGE_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/Cargo.toml")
+corrosion_import_crate(MANIFEST_PATH ${RUST_BRIDGE_MANIFEST})
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
@@ -165,6 +171,20 @@ src/main.cpp
 #------------------------------------------------------------------------------
 add_executable(openggs ${SOURCE_FILES})
 
+target_include_directories(openggs PRIVATE
+  "${SDL2_SOURCE_DIR}/include"
+  "${SDL2_image_SOURCE_DIR}/include"
+  "${SDL2_mixer_SOURCE_DIR}/include"
+)
+
+target_link_libraries(openggs PRIVATE 
+    SDL2::SDL2
+    SDL2_image::SDL2_image
+    SDL2_mixer::SDL2_mixer
+    rust_sdl_bridge)
+
+add_dependencies(openggs rust_sdl_bridge)
+
 
 #------------------------------------------------------------------------------
 # Clang-Format
@@ -188,79 +208,15 @@ endif()
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
-#------------------------------------------------------------------------------
-# Linux
-#------------------------------------------------------------------------------
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-
-add_custom_command(
-    # TODO: change for linux to .a
-    OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/librust_sdl_bridge.a
-    COMMAND cargo build --release
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge
-    COMMENT "Building Rust sdl2 bridge"
-)
-
-# Create an IMPORTED library target to represent the Rust static library:
-add_library(rust_sdl_bridge STATIC IMPORTED)
-set_target_properties(rust_sdl_bridge PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/librust_sdl_bridge.a"
-)
-
-# Make sure our C++ target depends on building the Rust library first:
-add_dependencies(openggs rust_sdl_bridge)
-
-# 3) Manually add the SDL2 include path
-target_include_directories(openggs PRIVATE
-  "${SDL2_SOURCE_DIR}/include"
-  "${SDL2_image_SOURCE_DIR}/include"
-  "${SDL2_mixer_SOURCE_DIR}/include"
-)
-
-target_link_libraries(openggs PRIVATE 
-                            SDL2::SDL2
-                            SDL2_image::SDL2_image
-                            SDL2_mixer::SDL2_mixer
-                            rust_sdl_bridge)
-                            
-endif()
-
-
-#------------------------------------------------------------------------------
-# Windows
-#------------------------------------------------------------------------------
 if(WIN32)
-add_custom_command(
-    # TODO: change for linux to .a
-    OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/rust_sdl_bridge.lib
-    COMMAND cargo build --release
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge
-    COMMENT "Building Rust sdl2 bridge"
-)
-
-# Create an IMPORTED library target to represent the Rust static library:
-add_library(rust_sdl_bridge STATIC IMPORTED)
-set_target_properties(rust_sdl_bridge PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/rust_sdl_bridge/target/release/rust_sdl_bridge.lib"
-)
-
-# Make sure our C++ target depends on building the Rust library first:
-add_dependencies(openggs rust_sdl_bridge)
-
     target_link_libraries(openggs
         PRIVATE
-        rust_sdl_bridge
-        # Link ntdll for the NtXxx calls:
+        SDL2::SDL2main
         ntdll
-        # Also link typical Windows libs if you get other missing symbols:
         ws2_32
         userenv
         advapi32
         shell32
-        SDL2::SDL2
-        SDL2::SDL2main    # needed on Windows
-        SDL2_image
-        SDL2_mixer
     )
 endif()
 #------------------------------------------------------------------------------

@@ -2,7 +2,7 @@ use std::ptr;
 
 use sdl2::image::{self, InitFlag as ImageInitFlag, Sdl2ImageContext};
 use sdl2::mixer::{
-    self, allocate_channels, close_audio, init as mixer_init, open_audio, InitFlag as MixerInitFlag,
+    allocate_channels, close_audio, init as mixer_init, open_audio, InitFlag as MixerInitFlag,
     AUDIO_S16LSB, DEFAULT_CHANNELS,
 };
 use sdl2::Sdl;
@@ -11,8 +11,8 @@ static mut SDL_CONTEXT: *mut Sdl = ptr::null_mut();
 static mut SDL_IMAGE_CONTEXT: *mut Sdl2ImageContext = ptr::null_mut();
 static mut SDL_MIXER_INITIALIZED: bool = false;
 
-#[no_mangle]
-pub extern "C" fn init_sdl2_bridge() -> i32 {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn init_sdl2_bridge() -> i32 {
     unsafe {
         if !SDL_CONTEXT.is_null() {
             return 0;
@@ -55,12 +55,11 @@ pub extern "C" fn init_sdl2_bridge() -> i32 {
     0
 }
 
-#[no_mangle]
-pub extern "C" fn quit_sdl2_bridge() {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quit_sdl2_bridge() {
     unsafe {
         if SDL_MIXER_INITIALIZED {
             close_audio();
-            mixer::quit();
             SDL_MIXER_INITIALIZED = false;
         }
 

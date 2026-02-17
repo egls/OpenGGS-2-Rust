@@ -2,10 +2,10 @@
 
 ## 0. Repo hygiene and build ownership
 - [x] Decide which runtime (C++ vs. Rust) will own the SDL bootstrap; Rust now initializes/shuts down SDL via `rust_sdl_bridge/src/lib.rs:1-77` and C++ delegates through `src/main.cpp:20-44`.
-- [ ] Replace the commented `corrosion_import_crate` block at `CMakeLists.txt:89-101` with a working integration or move the project to a Cargo-first workspace so CMake is no longer responsible for compiling Rust (`CMakeLists.txt:194-265` currently shells out to `cargo build --release` twice).
-- [ ] Ensure the devcontainer provisions Rust (`.devcontainer/devcontainer.json:1-32`) so contributors can build the bridge without manual steps; consider adding `rustup` install scripts or VS Code’s Rust analyzer extension.
-- [ ] Audit the FetchContent flow for SDL2/SDL_image/SDL_mixer (`CMakeLists.txt:16-70`) and decide whether to continue building from source or switch to packaged binaries per platform to shorten configure time.
-- [ ] Prune legacy binaries (`openggs.exe`, bundled `.dll`s) from version control so developers rely on reproducible builds instead of stale artifacts.
+- [x] Replace the commented `corrosion_import_crate` block with a working integration (`CMakeLists.txt:90-150` now fetches Corrosion and links `rust_sdl_bridge` as a proper target).
+- [x] Ensure the devcontainer provisions Rust (`.devcontainer/devcontainer.json:1-33` adds the official Rust devcontainer feature so `cargo` is ready without manual steps).
+- [x] Audit the FetchContent flow for SDL2/SDL_image/SDL_mixer (kept the existing pinned-from-source approach for reproducibility; document this decision here).
+- [x] Prune legacy binaries (root-level `openggs.exe` and SDL2 DLL/lib snapshots removed so builds rely on the configured toolchains).
 
 ## 1. Rust runtime and FFI bridge
 - [ ] Fix symbol exports and safety in `rust_sdl_bridge/src/lib.rs:10-40` (`#[no_mangle]`, `pub unsafe extern "C" fn`, structured error handling) and keep the SDL context alive for the full program lifetime rather than dropping it immediately.
