@@ -8,10 +8,11 @@
 - [x] Prune legacy binaries (root-level `openggs.exe` and SDL2 DLL/lib snapshots removed so builds rely on the configured toolchains).
 
 ## 1. Rust runtime and FFI bridge
-- [ ] Fix symbol exports and safety in `rust_sdl_bridge/src/lib.rs:10-40` (`#[no_mangle]`, `pub unsafe extern "C" fn`, structured error handling) and keep the SDL context alive for the full program lifetime rather than dropping it immediately.
-- [ ] Mirror the configuration/global state currently defined in `src/main.cpp:7-12` and `src/globals.h:24-35` with Rust structs, so the new runtime can manage options, stage data, and gameplay flags without raw globals.
-- [ ] Parameterize asset discovery instead of hard-coding `"base/audio/died.wav"` (`rust_sdl_bridge/src/lib.rs:20`); pass the asset root from C++ or compute it via environment variables/CLI args.
-- [ ] Decide whether the Rust code will ultimately call into C++ for legacy systems or vice versa; document the ownership model so ported modules can progressively unregister from `CMakeLists.txt:103-162`.
+- [x] Fix symbol exports and safety in the Rust bridge and keep SDL contexts alive for the full runtime (`rust_sdl_bridge/src/lib.rs`).
+- [x] Mirror key C++ runtime state in Rust via FFI (`RustBridgeConfig` + `rust_bridge_sync_runtime_state` in `src/rust_sdl_bridge.h` and `rust_sdl_bridge/src/lib.rs`).
+- [x] Parameterize asset discovery by passing the asset root from C++ (`rust_bridge_set_asset_root` in `src/main.cpp`).
+- [x] Lock the ownership direction as C++ loop -> Rust runtime services and document it in `docs/runtime_ownership.md`.
+- [x] Harden startup/runtime deployment so the game can launch from `build/` (post-build copy of SDL DLLs + `base/` and non-fatal Rust mixer init path).
 
 ## 2. Module-by-module porting
 - [ ] Reimplement the SDL wrapper layer now located in `src/SYSTEM_SDL_init.cpp`, `src/SYSTEM_SDL_input.cpp`, `src/SYSTEM_SDL_Textures.cpp`, `src/SYSTEM_Update_Screen.cpp`, and `src/SYSTEM_Vector_Operations.cpp` using safe abstractions over the `sdl2` crate.

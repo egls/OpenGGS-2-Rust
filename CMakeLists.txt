@@ -185,6 +185,17 @@ target_link_libraries(openggs PRIVATE
 
 add_dependencies(openggs rust_sdl_bridge)
 
+add_custom_command(TARGET openggs POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:SDL2::SDL2>
+        $<TARGET_FILE:SDL2_image::SDL2_image>
+        $<TARGET_FILE:SDL2_mixer::SDL2_mixer>
+        $<TARGET_FILE_DIR:openggs>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/base
+        $<TARGET_FILE_DIR:openggs>/base
+)
+
 
 #------------------------------------------------------------------------------
 # Clang-Format

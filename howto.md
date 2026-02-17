@@ -2,7 +2,7 @@
 
 ## 1. Prerequisites
 - CMake ≥ 3.15 and a C++17-capable compiler (MSVC, Clang, or GCC), matching the settings at `CMakeLists.txt:1-7`.
-- Rust toolchain (stable 1.77+ recommended) with `cargo` to build `rust_sdl_bridge` (`rust_sdl_bridge/Cargo.toml:1-10`). The devcontainer does not install Rust yet (`.devcontainer/devcontainer.json:1-32`), so run `rustup-init` inside it.
+- Rust toolchain (stable 1.77+ recommended) with `cargo` to build `rust_sdl_bridge` (`rust_sdl_bridge/Cargo.toml:1-10`). The devcontainer now includes Rust via features (`.devcontainer/devcontainer.json`).
 - On Windows, install the MinGW-compatible target that matches the LLVM/Clang toolchain by running `rustup target add x86_64-pc-windows-gnu`; CMake passes this triple to Corrosion so the Rust static library links cleanly with the rest of the build.
 - Ninja or Make (choose via `-G`), Python, and Git for CMake’s FetchContent (SDL dependencies are cloned at `CMakeLists.txt:16-70`).
 - SDL build prerequisites (CMake will fetch the sources, but system packages such as `libasound2-dev` on Linux may still be needed).
