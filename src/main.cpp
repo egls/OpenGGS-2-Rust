@@ -23,17 +23,7 @@ int main(int argc, char* args[]) {
     std::cerr << "Failed to initialize SDL (via Rust)\n";
     return 1;
   }
-
-  // TODO: document the steps to call sdl2 rust from c++
-  // TODO: trigger rust build step from cmake
-  // TODO: create sample programm and play a wav file with sdl::mixer 
-  
   std::cout << "SDL Initialized by Rust!\n"; // output in std_out.txt
-  
-  // Instead of SDL_Quit(), do:
-  quit_sdl2_bridge();
-  std::cout << "SDL Quit (via Rust)\n";
-
 
    GAME_ENVIRONMENT_Define();
 
@@ -48,7 +38,9 @@ int main(int argc, char* args[]) {
 
   LOOP_Menu();
 
-  close();  //Free resources and close SDL
+  close();  //Free resources and close SDL objects
+  quit_sdl2_bridge();
+  std::cout << "SDL Quit (via Rust)\n";
   return 0; 
 }
 
@@ -66,9 +58,7 @@ void close() {
 
   gWindow = NULL;
   gRenderer = NULL;
-  //Quit SDL subsystems
-  IMG_Quit();
-  SDL_Quit();
+  // SDL shutdown is owned by rust_sdl_bridge.
 }
 
 // ##############################################

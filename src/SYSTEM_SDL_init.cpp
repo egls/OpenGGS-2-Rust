@@ -12,50 +12,44 @@ SDL_Joystick* GameController = NULL;
 void init() {
   CurrentScreenMode = 0;
 
-  //Initialize SDL
-  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    printf("SDL could not initialize! SDL Error: %s\n", SDL_GetError());
+  if ((SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO) == 0) {
+    printf("SDL video subsystem not initialized. Run init_sdl2_bridge first.\n");
+    return;
+  }
+
+  //Enable VSync
+  //if( !SDL_SetHint( SDL_HINT_RENDER_VSYNC, "1" ) ){printf( "Warning: VSync not enabled!\n" );}
+  //Set texture filtering to linear
+  if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1")) {
+    printf("Warning: Linear texture filtering not enabled!\n");
+  }
+
+  //IMPORTANT
+  //Start program in windowed mode! If renderers are created after program is in fullscreen mode
+  //there are a lot of weird problems.
+  //IMPORTANT
+
+  //Create window
+  //    gWindow = SDL_CreateWindow( "GameBase (SDL 2.0)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREENWIDTH, SCREENHEIGHT, SDL_WINDOW_SHOWN); //|SDL_WINDOW_FULLSCREEN
+  //gWindow = SDL_CreateWindow( "OpenGGS 2.0 (aka OpenGGS Maker)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, GV.Screen_Width, GV.Screen_Height, SDL_WINDOW_SHOWN); //|SDL_WINDOW_FULLSCREEN
+  gWindow = SDL_CreateWindow("OpenGGS 2.0 (aka OpenGGS Maker) - BETA 3",
+                             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                             GV.Screen_Width, GV.Screen_Height,
+                             SDL_WINDOW_SHOWN);  //|SDL_WINDOW_FULLSCREEN
+  if (gWindow == NULL) {
+    printf("Window could not be created! SDL Error: %s\n", SDL_GetError());
   } else {
-    //Enable VSync
-    //if( !SDL_SetHint( SDL_HINT_RENDER_VSYNC, "1" ) ){printf( "Warning: VSync not enabled!\n" );}
-    //Set texture filtering to linear
-    if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1")) {
-      printf("Warning: Linear texture filtering not enabled!\n");
-    }
-
-    //IMPORTANT
-    //Start program in windowed mode! If renderers are created after program is in fullscreen mode
-    //there are a lot of weird problems.
-    //IMPORTANT
-
-    //Create window
-    //    gWindow = SDL_CreateWindow( "GameBase (SDL 2.0)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREENWIDTH, SCREENHEIGHT, SDL_WINDOW_SHOWN); //|SDL_WINDOW_FULLSCREEN
-    //gWindow = SDL_CreateWindow( "OpenGGS 2.0 (aka OpenGGS Maker)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, GV.Screen_Width, GV.Screen_Height, SDL_WINDOW_SHOWN); //|SDL_WINDOW_FULLSCREEN
-    gWindow = SDL_CreateWindow("OpenGGS 2.0 (aka OpenGGS Maker) - BETA 3",
-                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                               GV.Screen_Width, GV.Screen_Height,
-                               SDL_WINDOW_SHOWN);  //|SDL_WINDOW_FULLSCREEN
-    if (gWindow == NULL) {
-      printf("Window could not be created! SDL Error: %s\n", SDL_GetError());
+    // Create renderer for window
+    // gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED );
+    // gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE );
+    // gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED);
+    if (gRenderer == NULL) {
+      printf("Renderer could not be created! SDL Error: %s\n",
+             SDL_GetError());
     } else {
-      // Create renderer for window
-      // gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED );
-      // gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE );
-      // gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-      gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED);
-      if (gRenderer == NULL) {
-        printf("Renderer could not be created! SDL Error: %s\n",
-               SDL_GetError());
-      } else {
-        //Initialize renderer color
-        SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
-        //Initialize PNG loading
-        int imgFlags = IMG_INIT_PNG;
-        if (!(IMG_Init(imgFlags) & imgFlags)) {
-          printf("SDL_image could not initialize! SDL_image Error: %s\n",
-                 IMG_GetError());
-        }
-      }
+      //Initialize renderer color
+      SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
     }
   }
 
@@ -63,7 +57,6 @@ void init() {
   //SDL_RenderSetLogicalSize(gRenderer, GV.Screen_Width, GV.Screen_Height);
 
   int i;
-  SDL_Init(SDL_INIT_GAMECONTROLLER);
   SDL_JoystickEventState(SDL_ENABLE);
   GameController = SDL_JoystickOpen(0);
 

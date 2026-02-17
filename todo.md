@@ -1,7 +1,7 @@
 # OpenGGS-2-Rust — Porting TODO
 
 ## 0. Repo hygiene and build ownership
-- [ ] Decide which runtime (C++ vs. Rust) will own the SDL bootstrap; today `src/main.cpp:18-72` still performs the entire startup/shutdown sequence even after calling the Rust stub, so plan the transition before porting gameplay code.
+- [x] Decide which runtime (C++ vs. Rust) will own the SDL bootstrap; Rust now initializes/shuts down SDL via `rust_sdl_bridge/src/lib.rs:1-77` and C++ delegates through `src/main.cpp:20-44`.
 - [ ] Replace the commented `corrosion_import_crate` block at `CMakeLists.txt:89-101` with a working integration or move the project to a Cargo-first workspace so CMake is no longer responsible for compiling Rust (`CMakeLists.txt:194-265` currently shells out to `cargo build --release` twice).
 - [ ] Ensure the devcontainer provisions Rust (`.devcontainer/devcontainer.json:1-32`) so contributors can build the bridge without manual steps; consider adding `rustup` install scripts or VS Code’s Rust analyzer extension.
 - [ ] Audit the FetchContent flow for SDL2/SDL_image/SDL_mixer (`CMakeLists.txt:16-70`) and decide whether to continue building from source or switch to packaged binaries per platform to shorten configure time.
