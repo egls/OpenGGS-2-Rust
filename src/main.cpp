@@ -22,18 +22,20 @@ int main(int argc, char* args[]) {
   if (init_sdl2_bridge() < 0) {
     std::cerr << "Failed to initialize SDL (via Rust)\n";
     return 1;
-}
+  }
 
-std::cout << "SDL Initialized by Rust!\n"; // output in std_out.txt
+  // TODO: document the steps to call sdl2 rust from c++
+  // TODO: trigger rust build step from cmake
+  // TODO: create sample programm and play a wav file with sdl::mixer 
+  
+  std::cout << "SDL Initialized by Rust!\n"; // output in std_out.txt
+  
+  // Instead of SDL_Quit(), do:
+  quit_sdl2_bridge();
+  std::cout << "SDL Quit (via Rust)\n";
 
-// ... do stuff ...
 
-// Instead of SDL_Quit(), do:
-quit_sdl2_bridge();
-std::cout << "SDL Quit (via Rust)\n";
-return 0;
-
-/*   GAME_ENVIRONMENT_Define();
+   GAME_ENVIRONMENT_Define();
 
   init();             // Start up SDL and create window
   srand(time(NULL));  // initialize random seed
@@ -47,7 +49,7 @@ return 0;
   LOOP_Menu();
 
   close();  //Free resources and close SDL
-  return 0; */
+  return 0; 
 }
 
 // ##############################################
