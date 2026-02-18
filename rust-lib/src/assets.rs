@@ -82,6 +82,8 @@ fn check_loading(
         asset_server.get_load_state(assets.tiles.id()),
         asset_server.get_load_state(assets.player.id()),
         asset_server.get_load_state(assets.enemies.id()),
+        asset_server.get_load_state(assets.jump_sfx.id()),
+        asset_server.get_load_state(assets.stomp_sfx.id()),
     ];
 
     // Log any failures
