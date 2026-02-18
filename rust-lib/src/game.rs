@@ -33,6 +33,32 @@ pub struct Tile {
     pub tile_id: i32,
 }
 
+// --- Animation ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerDirection {
+    Right,
+    Left,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerStance {
+    Stand,
+    Walk1,
+    Walk2,
+    Jump,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Animation {
+    pub direction: PlayerDirection,
+    pub stance: PlayerStance,
+    pub walk_timer: u32,
+}
+
+// Frame data: (src_x, src_y, src_w, src_h)
+type Frame = (i32, i32, u32, u32);
+
 use crate::tile_properties::TileSheetInfo;
 
 pub struct Game {
@@ -40,6 +66,7 @@ pub struct Game {
     camera_x: f32,
     tile_info: TileSheetInfo,
     map: [[i32; 30]; 256],
+    player_frames: Vec<Frame>,
 }
 
 impl Game {
@@ -47,12 +74,20 @@ impl Game {
         let mut world = World::new();
         let mut map = [[0; 30]; 256];
         
+        // Parse Player.txt frame data (92 ints = 23 frames × 4 values)
+        let player_frames = Self::load_player_frames("../base/c64/Player.txt");
+        
         // Spawn Player
         world.spawn((
             Player,
             Position { x: 100.0, y: 300.0 }, // Starting pos from C++ PC_Define
             Velocity { vx: 0.0, vy: 0.0 },
             Collider { width: 28.0, height: 42.0, on_ground: false },
+            Animation {
+                direction: PlayerDirection::Right,
+                stance: PlayerStance::Stand,
+                walk_timer: 0,
+            },
         ));
 
         // Load Level 1
@@ -86,7 +121,36 @@ impl Game {
             camera_x: 0.0,
             tile_info,
             map,
+            player_frames,
         }
+    }
+
+    fn load_player_frames(path: &str) -> Vec<Frame> {
+        let mut frames = Vec::new();
+        let content = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to load player frames: {}", e);
+                return frames;
+            }
+        };
+        
+        // Parse all comma-separated integers
+        let nums: Vec<i32> = content
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.trim().parse::<i32>().ok())
+            .collect();
+        
+        // Group into frames of 4: (x, y, w, h)
+        for chunk in nums.chunks(4) {
+            if chunk.len() == 4 {
+                frames.push((chunk[0], chunk[1], chunk[2] as u32, chunk[3] as u32));
+            }
+        }
+        
+        println!("Loaded {} player frames", frames.len());
+        frames
     }
 }
 
@@ -104,11 +168,29 @@ impl GameState for Game {
         const ACCELERATION: f32 = 1.0;
         const JUMP_STRENGTH: f32 = 12.0; // Reduced from 24 temporarily for testing
 
+        // --- 1. Input System ---
+        // (Input is applied inside the physics loop below)
+
         // --- 2. Physics & Collision System ---
         let map = &self.map;
         let tile_info = &self.tile_info;
 
-        for (pos, vel, collider) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider)>().with::<&Player>() {
+        for (pos, vel, collider, anim) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider, &mut Animation)>().with::<&Player>() {
+            // --- Input ---
+            if input.keys_pressed.contains(&Keycode::Left) {
+                vel.vx -= ACCELERATION;
+                if vel.vx < -MAX_RUN_SPEED { vel.vx = -MAX_RUN_SPEED; }
+                anim.direction = PlayerDirection::Left;
+            }
+            if input.keys_pressed.contains(&Keycode::Right) {
+                vel.vx += ACCELERATION;
+                if vel.vx > MAX_RUN_SPEED { vel.vx = MAX_RUN_SPEED; }
+                anim.direction = PlayerDirection::Right;
+            }
+            if input.keys_pressed.contains(&Keycode::Space) && collider.on_ground {
+                vel.vy = -JUMP_STRENGTH;
+            }
+
             // Apply Gravity
             vel.vy += GRAVITY;
             
@@ -135,6 +217,19 @@ impl GameState for Game {
             // --- Y Axis Move & Collide ---
             pos.y += vel.vy;
             check_map_collision(map, tile_info, pos, vel, collider, false);
+
+            // --- Animation State Machine ---
+            if !collider.on_ground {
+                anim.stance = PlayerStance::Jump;
+            } else if vel.vx.abs() > 0.1 {
+                // Walk: alternate Walk1/Walk2 every 8 frames
+                anim.walk_timer += 1;
+                if anim.walk_timer >= 16 { anim.walk_timer = 0; }
+                anim.stance = if anim.walk_timer < 8 { PlayerStance::Walk1 } else { PlayerStance::Walk2 };
+            } else {
+                anim.stance = PlayerStance::Stand;
+                anim.walk_timer = 0;
+            }
         }
         
         // --- 3. Camera System ---
@@ -188,19 +283,33 @@ impl GameState for Game {
         }
         
         // Draw Player
-         for (pos, collider, _player) in self.world.query::<(&Position, &Collider, &Player)>().iter() {
-             let screen_x = pos.x - self.camera_x;
-             // Draw simple sprite rect for now (assuming frame 0 of player texture)
-             // Using entire player texture or a specific frame? 
-             // PC definition had Frames. Let's just draw a subset of the texture.
-             // Player.png is 7312 bytes.
-             // Let's guess default frame is top-left.
-             let src = Rect::new(0, 0, 50, 50); // Guessing sprite size from texture
-             // Actually, collider says 28x42.
-             let dest = Rect::new(screen_x as i32, pos.y as i32, collider.width as u32, collider.height as u32);
-             
-             canvas.copy(resources.player_texture, src, dest)?;
-         }
+        for (pos, _collider, anim, _player) in self.world.query::<(&Position, &Collider, &Animation, &Player)>().iter() {
+            let screen_x = pos.x - self.camera_x;
+            
+            // Look up frame index: Direction(0=R,1=L) * 5 + Stance(0=Stand,1=Walk1,2=Walk2,3=Jump)
+            let dir_offset = match anim.direction {
+                PlayerDirection::Right => 0,
+                PlayerDirection::Left  => 5,
+            };
+            let stance_offset = match anim.stance {
+                PlayerStance::Stand => 0,
+                PlayerStance::Walk1 => 1,
+                PlayerStance::Walk2 => 2,
+                PlayerStance::Jump  => 3,
+            };
+            let frame_idx = dir_offset + stance_offset;
+            
+            let (sx, sy, sw, sh) = if frame_idx < self.player_frames.len() {
+                self.player_frames[frame_idx]
+            } else {
+                (0, 0, 32, 44) // fallback
+            };
+            
+            let src  = Rect::new(sx, sy, sw, sh);
+            let dest = Rect::new(screen_x as i32, pos.y as i32, sw, sh);
+            
+            canvas.copy(resources.player_texture, src, dest)?;
+        }
 
         Ok(())
     }
