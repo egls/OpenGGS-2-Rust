@@ -6,7 +6,6 @@ use crate::tile_properties::{self, TileSheetInfo};
 
 // ── Resources ────────────────────────────────────────────────────────────────
 
-/// Handles to every texture used in-game.
 #[derive(Resource)]
 pub struct GameAssets {
     pub tiles:     Handle<Image>,
@@ -16,7 +15,6 @@ pub struct GameAssets {
     pub stomp_sfx: Handle<AudioSource>,
 }
 
-/// Loaded level data (binary structs from C++ format).
 #[derive(Resource)]
 pub struct LevelData {
     pub stage:     ImportStage,
@@ -29,16 +27,25 @@ pub struct AssetsPlugin;
 
 impl Plugin for AssetsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Loading), start_loading)
+        app.add_systems(Startup, spawn_persistent_camera)
+           .add_systems(OnEnter(GameState::Loading), start_loading)
            .add_systems(Update, check_loading.run_if(in_state(GameState::Loading)));
     }
+}
+
+// ── Persistent camera (exists across all states for UI) ───────────────────────
+
+/// Marker so we don't accidentally despawn this camera with GameEntity cleanup.
+#[derive(Component)]
+pub struct PersistentCamera;
+
+fn spawn_persistent_camera(mut commands: Commands) {
+    commands.spawn((Camera2d, PersistentCamera));
 }
 
 // ── Systems ──────────────────────────────────────────────────────────────────
 
 fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // Resolve absolute paths for synchronous binary file reads.
-    // The binary is run from rust-lib/, so we go up one level to reach base/.
     let base = std::path::Path::new("..").join("base");
 
     let stage = level::load_stage(base.join("stages/classic.lvl").to_str().unwrap(), 1)
@@ -50,7 +57,7 @@ fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     commands.insert_resource(LevelData { stage, tile_info });
 
-    // Bevy AssetServer resolves relative to rust-lib/assets/ (symlink → ../base)
+    // Bevy resolves these relative to rust-lib/assets/ (symlink → ../base)
     let assets = GameAssets {
         tiles:     asset_server.load("c64/Tiles.png"),
         player:    asset_server.load("c64/Player.png"),
@@ -62,19 +69,32 @@ fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 fn check_loading(
-    assets:       Res<GameAssets>,
+    assets_opt:   Option<Res<GameAssets>>,
     asset_server: Res<AssetServer>,
     mut next:     ResMut<NextState<GameState>>,
 ) {
     use bevy::asset::LoadState;
-    let all_loaded = [
+
+    // GameAssets may not be inserted yet on the very first frame
+    let Some(assets) = assets_opt else { return };
+
+    let states = [
         asset_server.get_load_state(assets.tiles.id()),
         asset_server.get_load_state(assets.player.id()),
         asset_server.get_load_state(assets.enemies.id()),
-    ]
-    .iter()
-    .all(|s| matches!(s, Some(LoadState::Loaded)));
+    ];
 
+    // Log any failures
+    for s in &states {
+        if matches!(s, Some(LoadState::Failed(_))) {
+            eprintln!("Asset failed to load! Check that rust-lib/assets symlink exists.");
+            // Proceed anyway so the game doesn't hang
+            next.set(GameState::Menu);
+            return;
+        }
+    }
+
+    let all_loaded = states.iter().all(|s| matches!(s, Some(LoadState::Loaded)));
     if all_loaded {
         next.set(GameState::Menu);
     }

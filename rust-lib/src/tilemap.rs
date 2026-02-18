@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::states::GameState;
-use crate::assets::{GameAssets, LevelData};
+use crate::assets::{GameAssets, LevelData, PersistentCamera};
 
 // ── Marker components ─────────────────────────────────────────────────────────
 
@@ -22,17 +22,13 @@ pub struct TileMapPlugin;
 
 impl Plugin for TileMapPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::InGame), (spawn_camera, spawn_tiles))
+        app.add_systems(OnEnter(GameState::InGame), spawn_tiles)
            .add_systems(Update, camera_follow.run_if(in_state(GameState::InGame)))
            .add_systems(OnExit(GameState::InGame), despawn_game_entities);
     }
 }
 
 // ── Systems ───────────────────────────────────────────────────────────────────
-
-fn spawn_camera(mut commands: Commands) {
-    commands.spawn((Camera2d, GameEntity));
-}
 
 fn spawn_tiles(
     mut commands: Commands,
@@ -74,14 +70,16 @@ fn spawn_tiles(
 
 /// Smooth camera follow — tracks the player entity's X position.
 fn camera_follow(
-    player_q: Query<&Transform, (With<crate::player::Player>, Without<Camera2d>)>,
-    mut cam_q: Query<&mut Transform, With<Camera2d>>,
+    player_q: Query<&Transform, (With<crate::player::Player>, Without<PersistentCamera>)>,
+    mut cam_q: Query<&mut Transform, With<PersistentCamera>>,
 ) {
     let Ok(player_tf) = player_q.get_single() else { return };
     let Ok(mut cam_tf) = cam_q.get_single_mut() else { return };
 
     let target_x = player_tf.translation.x;
+    let target_y = player_tf.translation.y + 50.0; // keep player in lower half
     cam_tf.translation.x += (target_x - cam_tf.translation.x) * 0.1;
+    cam_tf.translation.y += (target_y - cam_tf.translation.y) * 0.1;
 }
 
 fn despawn_game_entities(
