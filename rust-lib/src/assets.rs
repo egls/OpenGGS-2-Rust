@@ -40,14 +40,14 @@ fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Load level data synchronously (small binary files)
     let stage = level::load_stage("../base/stages/classic.lvl", 1)
         .expect("Failed to load classic.lvl");
-    let tile_info = tile_properties::load_tile_properties("../base/c64/Tilesheet.bin")
-        .expect("Failed to load Tilesheet.bin");
+    let tile_info = tile_properties::load_tile_properties("../base/Tilesheetinfo.tsi")
+        .expect("Failed to load Tilesheetinfo.tsi");
 
     commands.insert_resource(LevelData { stage, tile_info });
 
     // Queue async texture + audio loads
     let assets = GameAssets {
-        tiles:     asset_server.load("../base/c64/Tilesheet.png"),
+        tiles:     asset_server.load("../base/c64/Tiles.png"),
         player:    asset_server.load("../base/c64/Player.png"),
         enemies:   asset_server.load("../base/c64/Enemies.png"),
         jump_sfx:  asset_server.load("../base/audio/jump.wav"),
