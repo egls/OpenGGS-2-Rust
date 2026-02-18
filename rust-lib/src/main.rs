@@ -1,11 +1,16 @@
 mod assets;
+mod input;
+mod gamestate;
+mod menu;
+mod text;
 
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
-use sdl2::rect::Rect;
 use std::time::Duration;
+
 use crate::assets::AssetManager;
+use crate::input::InputState;
+use crate::gamestate::{StateManager, GameState};
+use crate::menu::MenuState;
 
 pub fn main() -> Result<(), String> {
     env_logger::init();
@@ -16,7 +21,6 @@ pub fn main() -> Result<(), String> {
     let _audio_subsystem = sdl_context.audio()?;
     let _mixer_context = sdl2::mixer::init(sdl2::mixer::InitFlag::OGG | sdl2::mixer::InitFlag::MP3)?;
 
-    // Open Mixer
     sdl2::mixer::open_audio(44100, sdl2::mixer::AUDIO_S16LSB, 2, 1024)?;
 
     let window = video_subsystem.window("OpenGGS Rust", 800, 600)
@@ -27,60 +31,54 @@ pub fn main() -> Result<(), String> {
     let mut canvas = window.into_canvas().build()
         .map_err(|e| e.to_string())?;
 
-    // Texture Creator must be created after canvas
     let texture_creator = canvas.texture_creator();
-
     // Load Assets
-    let asset_path = "../base/c64/Player.png"; // Assuming running from rust-lib
-    let player_texture = match AssetManager::load_texture(&texture_creator, asset_path) {
+    let asset_path = "../base/c64/Player.png"; 
+    let _player_texture = match AssetManager::load_texture(&texture_creator, asset_path) {
         Ok(t) => t,
-        Err(e) => {
-            eprintln!("Failed to load texture {}: {}", asset_path, e);
-            // Fallback or create a dummy texture if possible, or just panic for now
-            return Err(format!("Failed to load asset: {}", e));
-        }
+        Err(e) => return Err(format!("Failed to load asset: {}", e)),
     };
     
-    // Try loading a sound (optional verify)
-    let sound_path = "../base/audio/jump.wav";
-    let jump_sound = match AssetManager::load_sound(sound_path) {
-        Ok(s) => Some(s),
-        Err(e) => {
-            eprintln!("Failed to load sound {}: {}", sound_path, e);
-            None
-        }
+    let font_path = "../base/Font.png";
+    let font_texture = match AssetManager::load_texture(&texture_creator, font_path) {
+        Ok(t) => t,
+        Err(e) => return Err(format!("Failed to load font: {}", e)),
     };
+    
+    // Sound loading omitted for brevity, logic remains valid if kept
 
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
     canvas.present();
 
+    // Initialize Input and State
+    let mut input_state = InputState::new();
+    let mut state_manager = StateManager::new();
+    state_manager.push(Box::new(MenuState::new()));
+    
     let mut event_pump = sdl_context.event_pump()?;
+    
     'running: loop {
+        input_state.new_frame();
+        
         for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    break 'running
-                },
-                Event::KeyDown { keycode: Some(Keycode::Space), .. } => {
-                     // Play sound
-                     if let Some(sound) = &jump_sound {
-                         let _ = sdl2::mixer::Channel::all().play(sound, 0);
-                     }
-                }
-                _ => {}
-            }
+            input_state.process_event(&event);
+        }
+
+        if input_state.quit_requested {
+            break 'running;
         }
         
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas.clear();
-        
-        // Draw Player Sprite
-        // Just drawing the whole texture at 100, 100
-        let query = player_texture.query();
-        let dest_rect = Rect::new(100, 100, query.width, query.height);
-        canvas.copy(&player_texture, None, dest_rect)?;
+        // Update State
+        if !state_manager.update(&input_state) {
+            break 'running;
+        }
+
+        // Draw State
+        let resources = crate::gamestate::Resources {
+            font_texture: &font_texture,
+        };
+        state_manager.draw(&mut canvas, &resources)?;
 
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
