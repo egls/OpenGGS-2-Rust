@@ -1,0 +1,47 @@
+    Checking openggs v0.1.0 (/Users/stefan/Workspace/OpenGGS-2-Rust/rust-lib)
+error[E0425]: cannot find value `player_path` in this scope
+  --> src/main.rs:57:77
+   |
+57 |     let player_texture = match AssetManager::load_texture(&texture_creator, player_path) {
+   |                                                                             ^^^^^^^^^^^ not found in this scope
+
+warning: unused import: `sdl2::pixels::Color`
+ --> src/text.rs:4:5
+  |
+4 | use sdl2::pixels::Color;
+  |     ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `crate::menu::MenuState`
+  --> src/main.rs:16:5
+   |
+16 | use crate::menu::MenuState;
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `GameState`
+  --> src/main.rs:15:38
+   |
+15 | use crate::gamestate::{StateManager, GameState};
+   |                                      ^^^^^^^^^
+
+warning: value assigned to `x` is never read
+  --> src/text.rs:33:13
+   |
+33 |             x = (c as i32 - 'k' as i32) * 10 + 100; // 'k' start at 100? No, let's follow the pattern
+   |             ^
+   |
+   = help: maybe it is overwritten before being read?
+   = note: `#[warn(unused_assignments)]` on by default
+
+warning: unused variable: `collider`
+   --> src/game.rs:117:24
+    |
+117 |         for (pos, vel, collider) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider)>().with::<&Player>() {
+    |                        ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_collider`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+For more information about this error, try `rustc --explain E0425`.
+warning: `openggs` (bin "openggs") generated 5 warnings
+error: could not compile `openggs` (bin "openggs") due to 1 previous error; 5 warnings emitted

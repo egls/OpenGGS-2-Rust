@@ -8,16 +8,20 @@ use crate::input::InputState;
 use crate::text::BitmapFont;
 use crate::game::Game;
 
+use crate::tile_properties::TileSheetInfo;
+
 pub struct MenuState {
     selected_option: usize,
     options: Vec<&'static str>,
+    tile_info: TileSheetInfo,
 }
 
 impl MenuState {
-    pub fn new() -> Self {
+    pub fn new(tile_info: TileSheetInfo) -> Self {
         Self { 
             selected_option: 0,
             options: vec!["START GAME", "OPTIONS", "CREDITS", "QUIT"],
+            tile_info,
         }
     }
 }
@@ -42,7 +46,7 @@ impl GameState for MenuState {
         if input.is_key_just_pressed(Keycode::Return) {
             println!("Selected: {}", self.options[self.selected_option]);
             match self.selected_option {
-                0 => return StateTransition::Swap(Box::new(Game::new())),
+                0 => return StateTransition::Swap(Box::new(Game::new(self.tile_info.clone()))),
                 3 => return StateTransition::Quit,
                 _ => {}
             }

@@ -5,6 +5,7 @@ mod menu;
 mod text;
 mod level;
 mod game;
+mod tile_properties;
 
 use sdl2::pixels::Color;
 use std::time::Duration;
@@ -12,7 +13,6 @@ use std::time::Duration;
 use crate::assets::AssetManager;
 use crate::input::InputState;
 use crate::gamestate::{StateManager, GameState};
-use crate::menu::MenuState;
 
 pub fn main() -> Result<(), String> {
     env_logger::init();
@@ -59,6 +59,14 @@ pub fn main() -> Result<(), String> {
         Err(e) => return Err(format!("Failed to load player: {}", e)),
     };
     
+    // Load Tile Properties
+    let tile_props_path = "../base/Tilesheetinfo.tsi";
+    let tile_info = match tile_properties::load_tile_properties(tile_props_path) {
+        Ok(info) => info,
+        Err(e) => return Err(format!("Failed to load tile properties: {}", e)),
+    };
+    println!("Loaded Tile Info: Tile Width={}, Height={}", tile_info.tile_width, tile_info.tile_height);
+    
     // Test Level Loading
     let level_path = "../base/stages/classic.lvl";
     match level::load_stage(level_path, 1) { // Load Stage 1
@@ -77,7 +85,17 @@ pub fn main() -> Result<(), String> {
     // Initialize Input and State
     let mut input_state = InputState::new();
     let mut state_manager = StateManager::new();    // Start with Menu State
-    state_manager.push(Box::new(menu::MenuState::new(font_texture)));
+    // We can't really pass tile_info to MenuState easily unless we change its sig.
+    // For now, let's keep it in main and pass it when creating Game.
+    // But StateManager holds Box<dyn GameState>.
+    // To transition from Menu to Game, Menu needs to know about tile_info or be able to create Game.
+    // Issue: MenuState doesn't have tile_info.
+    // Solution:
+    // 1. Pass tile_info into MenuState (requires changing MenuState).
+    // 2. Or, for now, just clone it? but it's large (30KB).
+    // Let's modify MenuState to hold tile_info so it can pass it to Game.
+    // Start with Menu State
+    state_manager.push(Box::new(menu::MenuState::new(tile_info)));
     
     let mut event_pump = sdl_context.event_pump()?;
     

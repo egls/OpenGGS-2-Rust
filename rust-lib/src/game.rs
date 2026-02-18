@@ -33,14 +33,19 @@ pub struct Tile {
     pub tile_id: i32,
 }
 
+use crate::tile_properties::TileSheetInfo;
+
 pub struct Game {
     world: World,
     camera_x: f32,
+    tile_info: TileSheetInfo,
+    map: [[i32; 30]; 256],
 }
 
 impl Game {
-    pub fn new() -> Self {
+    pub fn new(tile_info: TileSheetInfo) -> Self {
         let mut world = World::new();
+        let mut map = [[0; 30]; 256];
         
         // Spawn Player
         world.spawn((
@@ -55,8 +60,9 @@ impl Game {
         match level::load_stage(level_path, 1) { // Load Stage 1
             Ok(stage) => {
                 println!("Game: Loaded Stage 1");
+                map = stage.array; // Store the map data
+                
                 // Iterate over array [x][y]
-                // array is [[i32; 30]; 256]
                 for x in 0..256 {
                     for y in 0..30 {
                         let tile_id = stage.array[x][y];
@@ -78,6 +84,8 @@ impl Game {
         Self {
             world,
             camera_x: 0.0,
+            tile_info,
+            map,
         }
     }
 }
@@ -96,72 +104,59 @@ impl GameState for Game {
         const ACCELERATION: f32 = 1.0;
         const JUMP_STRENGTH: f32 = 12.0; // Reduced from 24 temporarily for testing
 
-        // --- 1. Input System (Player only) ---
-        for (vel, collider) in self.world.query_mut::<(&mut Velocity, &Collider)>().with::<&Player>() {
-            if input.is_key_down(Keycode::Left) {
-                vel.vx -= ACCELERATION;
-            }
-            if input.is_key_down(Keycode::Right) {
-                vel.vx += ACCELERATION;
-            }
-            // Jump
-            if input.is_key_just_pressed(Keycode::Space) && collider.on_ground {
-                vel.vy = -JUMP_STRENGTH;
-            }
-        }
+        // --- 2. Physics & Collision System ---
+        let map = &self.map;
+        let tile_info = &self.tile_info;
 
-        // --- 2. Physics Integration System ---
         for (pos, vel, collider) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider)>().with::<&Player>() {
             // Apply Gravity
             vel.vy += GRAVITY;
             
-            // Clamp Velocity
-            if vel.vy > TERMINAL_VELOCITY { vel.vy = TERMINAL_VELOCITY; }
-            if vel.vx > MAX_RUN_SPEED { vel.vx = MAX_RUN_SPEED; }
-            if vel.vx < -MAX_RUN_SPEED { vel.vx = -MAX_RUN_SPEED; }
-
-            // Apply Friction (if not accelerating? simplified for now)
-            if !input.is_key_down(Keycode::Left) && !input.is_key_down(Keycode::Right) {
-                 if vel.vx > 0.0 { vel.vx -= FRICTION; if vel.vx < 0.0 { vel.vx = 0.0; } }
-                 if vel.vx < 0.0 { vel.vx += FRICTION; if vel.vx > 0.0 { vel.vx = 0.0; } }
+            // Limit Fall Speed (Terminal Velocity)
+            if vel.vy > TERMINAL_VELOCITY {
+                vel.vy = TERMINAL_VELOCITY;
             }
 
-            // Apply Velocity to Position (Naive integration)
+            // Apply Friction
+            if vel.vx > 0.0 {
+                vel.vx -= FRICTION;
+                if vel.vx < 0.0 { vel.vx = 0.0; }
+            } else if vel.vx < 0.0 {
+                vel.vx += FRICTION;
+                if vel.vx > 0.0 { vel.vx = 0.0; }
+            }
+
+            collider.on_ground = false; // Reset ground state
+
+            // --- X Axis Move & Collide ---
             pos.x += vel.vx;
+            check_map_collision(map, tile_info, pos, vel, collider, true);
+
+            // --- Y Axis Move & Collide ---
             pos.y += vel.vy;
-            
-            // Camera follow player
-             // We can't access self.camera_x inside this loop easily if we want to write to it.
-             // We'll update camera after loop.
+            check_map_collision(map, tile_info, pos, vel, collider, false);
         }
         
-        // --- 3. Collision System (Naive floor check) ---
-        // TODO: AABB with Tiles. For now, just a floor plane at y=400 for testing gravity
-        for (pos, vel, collider) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider)>().with::<&Player>() {
-             collider.on_ground = false; // Reset
-             
-             // Simple floor collision test
-             if pos.y + collider.height > 400.0 {
-                 pos.y = 400.0 - collider.height;
-                 vel.vy = 0.0;
-                 collider.on_ground = true;
-             }
-        }
-        
-        // Update Camera (Post-Physics)
+        // --- 3. Camera System ---
         let mut player_x = 0.0;
         let mut found_player = false;
+        
         for (pos, _player) in self.world.query::<(&Position, &Player)>().iter() {
             player_x = pos.x;
             found_player = true;
-            break;
+            break; 
         }
+        
         if found_player {
              // Center player: camera_x = player_x - screen_width/2
-             let target_cam_x = player_x - 320.0; // 640/2
-             // Smooth follow or direct? Direct for now
-             self.camera_x = target_cam_x;
+             let target_cam_x = player_x - 350.0; // 800/2 roughly (actually 400, but let's shift it)
+             // Smooth follow (Lerp)
+             self.camera_x += (target_cam_x - self.camera_x) * 0.1;
+             
+             // Clamp to map bounds (0 to MapWidthPixels - ScreenWidth)
+             // Map is 256 tiles * 16 = 4096 px. Screen is 800.
              if self.camera_x < 0.0 { self.camera_x = 0.0; }
+             if self.camera_x > (4096.0 - 800.0) { self.camera_x = 4096.0 - 800.0; }
         }
 
         StateTransition::None
@@ -208,5 +203,81 @@ impl GameState for Game {
          }
 
         Ok(())
+    }
+}
+
+// Helper function for AABB Collision
+fn check_map_collision(
+    map: &[[i32; 30]; 256],
+    tile_info: &TileSheetInfo,
+    pos: &mut Position,
+    vel: &mut Velocity,
+    collider: &mut Collider,
+    x_axis: bool
+) {
+    let check_x = pos.x;
+    let check_y = pos.y;
+    let width = collider.width;
+    let height = collider.height;
+
+    // Calculate tile range to check
+    let left_tile = (check_x / 16.0).floor() as i32;
+    let right_tile = ((check_x + width) / 16.0).floor() as i32;
+    let top_tile = (check_y / 16.0).floor() as i32;
+    let bottom_tile = ((check_y + height) / 16.0).floor() as i32;
+
+    for tx in left_tile..=right_tile {
+        for ty in top_tile..=bottom_tile {
+            // Check bounds
+            if tx < 0 || tx >= 256 || ty < 0 || ty >= 30 {
+                continue;
+            }
+
+            let tile_id = map[tx as usize][ty as usize] as usize;
+            
+            // Check Solidity
+            let is_solid = if tile_id < 2320 {
+                tile_info.solid[tile_id] != 0
+            } else {
+                false
+            };
+
+            if is_solid {
+                // Determine collision depth / side
+                let tile_x = tx as f32 * 16.0;
+                let tile_y = ty as f32 * 16.0;
+                let tile_w = 16.0;
+                let tile_h = 16.0;
+
+                // AABB Check
+                if check_x < tile_x + tile_w &&
+                   check_x + width > tile_x &&
+                   check_y < tile_y + tile_h &&
+                   check_y + height > tile_y {
+                    
+                    if x_axis {
+                        // Resolve X
+                        if vel.vx > 0.0 { // Moving Right
+                            pos.x = tile_x - width;
+                            vel.vx = 0.0;
+                        } else if vel.vx < 0.0 { // Moving Left
+                            pos.x = tile_x + tile_w;
+                            vel.vx = 0.0;
+                        }
+                    } else {
+                        // Resolve Y
+                        if vel.vy > 0.0 { // Falling
+                            pos.y = tile_y - height;
+                            vel.vy = 0.0;
+                            collider.on_ground = true;
+                        } else if vel.vy < 0.0 { // Jumping (Head bump)
+                            pos.y = tile_y + tile_h;
+                            vel.vy = 0.0;
+                        }
+                    }
+                    return; // Resolve one collision per axis per frame (simple approach)
+                }
+            }
+        }
     }
 }
