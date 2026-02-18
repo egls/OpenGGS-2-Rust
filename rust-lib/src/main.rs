@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
 mod assets;
+mod enemy;
+mod hud;
 mod level;
 mod menu;
 mod player;
@@ -9,6 +11,8 @@ mod tile_properties;
 mod tilemap;
 
 use assets::AssetsPlugin;
+use enemy::EnemyPlugin;
+use hud::HudPlugin;
 use menu::MenuPlugin;
 use player::PlayerPlugin;
 use states::GameState;
@@ -35,6 +39,8 @@ fn main() {
             MenuPlugin,
             TileMapPlugin,
             PlayerPlugin,
+            EnemyPlugin,
+            HudPlugin,
         ))
         .run();
 }
