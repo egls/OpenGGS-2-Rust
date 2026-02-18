@@ -38,39 +38,32 @@ fn spawn_tiles(
     mut commands: Commands,
     level:        Res<LevelData>,
     assets:       Res<GameAssets>,
-    mut layouts:  ResMut<Assets<TextureAtlasLayout>>,
 ) {
-    const TILE_W: u32 = 16;
-    const TILE_H: u32 = 16;
-    const TILES_PER_ROW: u32 = 40;
-
-    let layout = TextureAtlasLayout::from_grid(
-        UVec2::new(TILE_W, TILE_H),
-        TILES_PER_ROW,
-        60, // rows (2320 tiles / 40 per row = 58, round up)
-        None,
-        None,
-    );
-    let layout_handle = layouts.add(layout);
+    const TILE_W: f32 = 16.0;
+    const TILE_H: f32 = 16.0;
+    const TILES_PER_ROW: i32 = 40;
 
     for x in 0..256usize {
         for y in 0..30usize {
             let tile_id = level.stage.array[x][y];
             if tile_id == 0 { continue; }
 
-            let atlas_index = tile_id as usize;
-            let px = (x as f32) * TILE_W as f32;
-            let py = -(y as f32) * TILE_H as f32; // Bevy Y-up: flip
+            let col = tile_id % TILES_PER_ROW;
+            let row = tile_id / TILES_PER_ROW;
+            let src_x = col as f32 * TILE_W;
+            let src_y = row as f32 * TILE_H;
+
+            // Bevy Y-up: flip Y so row 0 is at the top of the screen
+            let px = x as f32 * TILE_W;
+            let py = -(y as f32 * TILE_H);
 
             commands.spawn((
                 GameEntity,
                 Tile { tile_id },
                 Sprite {
                     image: assets.tiles.clone(),
-                    texture_atlas: Some(TextureAtlas {
-                        layout: layout_handle.clone(),
-                        index: atlas_index,
-                    }),
+                    rect: Some(Rect::new(src_x, src_y, src_x + TILE_W, src_y + TILE_H)),
+                    custom_size: Some(Vec2::new(TILE_W, TILE_H)),
                     ..default()
                 },
                 Transform::from_xyz(px, py, 0.0),
