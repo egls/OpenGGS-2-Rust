@@ -3,10 +3,12 @@ use sdl2::render::Canvas;
 use sdl2::video::Window;
 use sdl2::rect::Rect;
 use sdl2::keyboard::Keycode;
+use sdl2::mixer::Chunk;
 
 use crate::gamestate::{GameState, StateTransition, Resources};
 use crate::input::InputState;
 use crate::level;
+use crate::text::BitmapFont;
 
 pub struct Position {
     pub x: f32,
@@ -80,14 +82,28 @@ struct EnemyFrameData {
 
 use crate::tile_properties::TileSheetInfo;
 
+fn load_chunk(path: &str) -> Option<Chunk> {
+    match Chunk::from_file(path) {
+        Ok(c) => Some(c),
+        Err(e) => { eprintln!("Audio: failed to load {}: {}", path, e); None }
+    }
+}
+
 pub struct Game {
     world: World,
     camera_x: f32,
     tile_info: TileSheetInfo,
     map: [[i32; 30]; 256],
     player_frames: Vec<Frame>,
-    enemy_frames: Vec<EnemyFrameData>,  // index 0 = type 1
-    stomp_bounce: bool,  // set when player stomps an enemy; applied next physics tick
+    enemy_frames: Vec<EnemyFrameData>,
+    stomp_bounce: bool,
+    // HUD state
+    score: u32,
+    lives: u32,
+    stage_num: u32,
+    // Audio
+    snd_jump:  Option<Chunk>,
+    snd_stomp: Option<Chunk>,
 }
 
 impl Game {
@@ -101,10 +117,10 @@ impl Game {
         // Parse Enemies.txt frame data (690 ints = 15 types × 46 ints each)
         let enemy_frames = Self::load_enemy_frames("../base/c64/Enemies.txt");
         
-        // Spawn Player
-        world.spawn((
+        // Spawn Player — position updated below once level is loaded
+        let player_entity = world.spawn((
             Player,
-            Position { x: 100.0, y: 300.0 }, // Starting pos from C++ PC_Define
+            Position { x: 100.0, y: 300.0 },
             Velocity { vx: 0.0, vy: 0.0 },
             Collider { width: 28.0, height: 42.0, on_ground: false },
             Animation {
@@ -116,11 +132,20 @@ impl Game {
 
         // Load Level 1
         let level_path = "../base/stages/classic.lvl";
-        match level::load_stage(level_path, 1) { // Load Stage 1
+        match level::load_stage(level_path, 1) {
             Ok(stage) => {
                 println!("Game: Loaded Stage 1");
-                map = stage.array; // Store the map data
-                
+                map = stage.array;
+
+                // Use level start position for player (player 1 = index 0)
+                let sx = stage.start_position_x[0] as f32;
+                let sy = stage.start_position_y[0] as f32;
+                if sx > 0.0 || sy > 0.0 {
+                    if let Ok(mut pos) = world.get::<&mut Position>(player_entity) {
+                        pos.x = sx;
+                        pos.y = sy;
+                    }
+                }
                 // Iterate over array [x][y]
                 for x in 0..256 {
                     for y in 0..30 {
@@ -170,6 +195,10 @@ impl Game {
             Err(e) => eprintln!("Game: Failed to load stage: {}", e),
         }
 
+        // Load audio
+        let snd_jump  = load_chunk("../base/audio/jump.wav");
+        let snd_stomp = load_chunk("../base/audio/stomp.wav");
+
         Self {
             world,
             camera_x: 0.0,
@@ -178,6 +207,11 @@ impl Game {
             player_frames,
             enemy_frames,
             stomp_bounce: false,
+            score: 0,
+            lives: 3,
+            stage_num: 1,
+            snd_jump,
+            snd_stomp,
         }
     }
 
@@ -293,6 +327,10 @@ impl GameState for Game {
             }
             if input.keys_pressed.contains(&Keycode::Space) && collider.on_ground {
                 vel.vy = -JUMP_STRENGTH;
+                // Play jump sound
+                if let Some(ref chunk) = self.snd_jump {
+                    let _ = sdl2::mixer::Channel::all().play(chunk, 0);
+                }
             }
 
             // Apply Gravity
@@ -438,6 +476,11 @@ impl GameState for Game {
             // Kill stomped enemies and set bounce flag (applied next player physics tick)
             if !stomp_targets.is_empty() {
                 self.stomp_bounce = true;
+                self.score += 100 * stomp_targets.len() as u32;
+                // Play stomp sound
+                if let Some(ref chunk) = self.snd_stomp {
+                    let _ = sdl2::mixer::Channel::all().play(chunk, 0);
+                }
                 for entity in stomp_targets {
                     if let Ok(mut enemy) = self.world.get::<&mut Enemy>(entity) {
                         enemy.alive = false;
@@ -525,6 +568,24 @@ impl GameState for Game {
             let src  = Rect::new(sx, sy, sw, sh);
             let dest = Rect::new(screen_x as i32, pos.y as i32, sw, sh);
             canvas.copy(resources.enemies_texture, src, dest)?;
+        }
+
+        // Draw HUD (on top of everything)
+        {
+            let font = BitmapFont::new(resources.font_texture);
+            let scale = 1.5;
+
+            // PLAYER / score
+            font.draw(canvas, 10, 4, "PLAYER", scale)?;
+            font.draw(canvas, 10, 20, &self.score.to_string(), scale)?;
+
+            // LIVES
+            font.draw(canvas, 320, 4, "LIVES", scale)?;
+            font.draw(canvas, 320, 20, &self.lives.to_string(), scale)?;
+
+            // STAGE
+            font.draw(canvas, 630, 4, "STAGE", scale)?;
+            font.draw(canvas, 630, 20, &self.stage_num.to_string(), scale)?;
         }
 
         Ok(())
