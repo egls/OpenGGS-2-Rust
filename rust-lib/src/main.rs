@@ -52,6 +52,12 @@ pub fn main() -> Result<(), String> {
         Ok(t) => t,
         Err(e) => return Err(format!("Failed to load tiles: {}", e)),
     };
+
+    let player_path = "../base/c64/Player.png";
+    let player_texture = match AssetManager::load_texture(&texture_creator, player_path) {
+        Ok(t) => t,
+        Err(e) => return Err(format!("Failed to load player: {}", e)),
+    };
     
     // Test Level Loading
     let level_path = "../base/stages/classic.lvl";
@@ -70,8 +76,8 @@ pub fn main() -> Result<(), String> {
 
     // Initialize Input and State
     let mut input_state = InputState::new();
-    let mut state_manager = StateManager::new();
-    state_manager.push(Box::new(MenuState::new()));
+    let mut state_manager = StateManager::new();    // Start with Menu State
+    state_manager.push(Box::new(menu::MenuState::new(font_texture)));
     
     let mut event_pump = sdl_context.event_pump()?;
     
@@ -95,6 +101,7 @@ pub fn main() -> Result<(), String> {
         let resources = crate::gamestate::Resources {
             font_texture: &font_texture,
             tiles_texture: &tiles_texture,
+            player_texture: &player_texture,
         };
         state_manager.draw(&mut canvas, &resources)?;
 

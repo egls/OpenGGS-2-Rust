@@ -5,6 +5,7 @@ use crate::input::InputState;
 pub struct Resources<'a> {
     pub font_texture: &'a Texture<'a>,
     pub tiles_texture: &'a Texture<'a>,
+    pub player_texture: &'a Texture<'a>,
 }
 
 pub enum StateTransition {
