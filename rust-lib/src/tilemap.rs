@@ -53,6 +53,12 @@ fn spawn_tiles(
             let px = x as f32 * TILE_W;
             let py = -(y as f32 * TILE_H);
 
+            let bg_color = match level.stage.background_colour {
+                0 => Color::srgb(0.4, 0.6, 1.0), // Blue sky
+                _ => Color::BLACK,
+            };
+            commands.insert_resource(ClearColor(bg_color));
+
             commands.spawn((
                 GameEntity,
                 Tile { tile_id },

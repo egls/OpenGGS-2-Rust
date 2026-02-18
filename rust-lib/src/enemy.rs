@@ -249,12 +249,26 @@ fn handle_stomp(
     mut enemies: Query<(&mut Enemy, &mut Sprite)>,
     mut player:  Query<&mut PlayerVelocity, With<Player>>,
     mut hud:     ResMut<crate::hud::HudState>,
+    frames:      Res<EnemyFrames>,
 ) {
     for ev in stomps.read() {
         if let Ok((mut enemy, mut sprite)) = enemies.get_mut(ev.enemy) {
             if !enemy.alive { continue; }
             enemy.alive = false;
-            sprite.color = Color::srgba(1.0, 1.0, 1.0, 0.0); // hide
+            
+            // Show dead frame (index 4)
+            if enemy.enemy_type < frames.0.len() {
+                let etype = &frames.0[enemy.enemy_type];
+                if let Some(&(x, y, w, h)) = etype.frames.get(4) {
+                    sprite.rect = Some(Rect::new(
+                        x as f32, y as f32,
+                        (x + w as i32) as f32, (y + h as i32) as f32,
+                    ));
+                    sprite.custom_size = Some(Vec2::new(w as f32, h as f32));
+                }
+            }
+            
+            sprite.color = Color::srgba(1.0, 1.0, 1.0, 0.5); // semi-transparent
             hud.score += 100;
         }
         if let Ok(mut vel) = player.get_single_mut() {

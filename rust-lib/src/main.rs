@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
 mod assets;
+mod audio;
 mod enemy;
+mod game_over;
 mod hud;
 mod level;
 mod menu;
@@ -41,6 +43,8 @@ fn main() {
             PlayerPlugin,
             EnemyPlugin,
             HudPlugin,
+            audio::AudioPlugin,
+            game_over::GameOverPlugin,
         ))
         .run();
 }

@@ -78,6 +78,7 @@ impl Plugin for PlayerPlugin {
                    apply_movement,
                    update_animation,
                    update_player_sprite,
+                   check_death,
                )
                    .chain()
                    .run_if(in_state(GameState::InGame)),
@@ -293,4 +294,35 @@ fn update_player_sprite(
         // Use custom_size to render at actual pixel size
         sprite.custom_size = Some(Vec2::new(w as f32, h as f32));
     }
+}
+
+fn check_death(
+    player_q: Query<&Transform, With<Player>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    level: Res<LevelData>,
+) {
+    if let Ok(tf) = player_q.get_single() {
+        if tf.translation.y < -600.0 { // Fell off screen
+            next_state.set(GameState::GameOver);
+        }
+
+        // Check if on exit tile
+        let px = tf.translation.x;
+        let py = -tf.translation.y;
+        for tx in tile_range(px, PLAYER_W) {
+            for ty in tile_range(py, PLAYER_H) {
+                if is_exit(tx, ty, &level) {
+                    next_state.set(GameState::GameOver);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+fn is_exit(tx: i32, ty: i32, level: &LevelData) -> bool {
+    if tx < 0 || tx >= 256 || ty < 0 || ty >= 30 { return false; }
+    let id = level.stage.array[tx as usize][ty as usize] as usize;
+    if id == 0 || id >= 2320 { return false; }
+    level.tile_info.exit[id] != 0
 }
