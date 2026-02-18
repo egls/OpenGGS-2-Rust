@@ -3,6 +3,8 @@ mod input;
 mod gamestate;
 mod menu;
 mod text;
+mod level;
+mod game;
 
 use sdl2::pixels::Color;
 use std::time::Duration;
@@ -44,8 +46,23 @@ pub fn main() -> Result<(), String> {
         Ok(t) => t,
         Err(e) => return Err(format!("Failed to load font: {}", e)),
     };
+
+    let tiles_path = "../base/c64/Tiles.png";
+    let tiles_texture = match AssetManager::load_texture(&texture_creator, tiles_path) {
+        Ok(t) => t,
+        Err(e) => return Err(format!("Failed to load tiles: {}", e)),
+    };
     
-    // Sound loading omitted for brevity, logic remains valid if kept
+    // Test Level Loading
+    let level_path = "../base/stages/classic.lvl";
+    match level::load_stage(level_path, 1) { // Load Stage 1
+        Ok(stage) => {
+            let name = String::from_utf8_lossy(&stage.name);
+            println!("Loaded Stage 1: {}", name);
+            println!("Background Colour: {}", stage.background_colour);
+        },
+        Err(e) => eprintln!("Failed to load stage: {}", e),
+    }
 
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
@@ -77,6 +94,7 @@ pub fn main() -> Result<(), String> {
         // Draw State
         let resources = crate::gamestate::Resources {
             font_texture: &font_texture,
+            tiles_texture: &tiles_texture,
         };
         state_manager.draw(&mut canvas, &resources)?;
 

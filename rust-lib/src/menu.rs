@@ -6,6 +6,7 @@ use sdl2::keyboard::Keycode;
 use crate::gamestate::{GameState, StateTransition, Resources};
 use crate::input::InputState;
 use crate::text::BitmapFont;
+use crate::game::Game;
 
 pub struct MenuState {
     selected_option: usize,
@@ -41,7 +42,7 @@ impl GameState for MenuState {
         if input.is_key_just_pressed(Keycode::Return) {
             println!("Selected: {}", self.options[self.selected_option]);
             match self.selected_option {
-                0 => { /* Start Game */ },
+                0 => return StateTransition::Swap(Box::new(Game::new())),
                 3 => return StateTransition::Quit,
                 _ => {}
             }

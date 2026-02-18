@@ -9,3 +9,4 @@ sdl2 = { version = "0.37", features = ["image", "mixer", "ttf", "gfx"] }
 glam = "0.29"
 log = "0.4"
 env_logger = "0.11"
+hecs = "0.11.0"
