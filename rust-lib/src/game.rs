@@ -59,6 +59,25 @@ pub struct Animation {
 // Frame data: (src_x, src_y, src_w, src_h)
 type Frame = (i32, i32, u32, u32);
 
+// --- Enemy ---
+
+pub struct Enemy {
+    pub enemy_type: u32,    // 1–15
+    pub alive: bool,
+    pub direction: i32,     // 0 = left, 1 = right (matches C++ NPC_LEFT/NPC_RIGHT)
+    pub anim_frame: usize,  // 0–3
+    pub anim_timer: u32,
+}
+
+#[derive(Clone)]
+struct EnemyFrameData {
+    col_w: f32,
+    col_h: f32,
+    frames_right: [Frame; 4],
+    frames_left:  [Frame; 4],
+    frame_dead:   Frame,
+}
+
 use crate::tile_properties::TileSheetInfo;
 
 pub struct Game {
@@ -67,6 +86,7 @@ pub struct Game {
     tile_info: TileSheetInfo,
     map: [[i32; 30]; 256],
     player_frames: Vec<Frame>,
+    enemy_frames: Vec<EnemyFrameData>,  // index 0 = type 1
 }
 
 impl Game {
@@ -76,6 +96,9 @@ impl Game {
         
         // Parse Player.txt frame data (92 ints = 23 frames × 4 values)
         let player_frames = Self::load_player_frames("../base/c64/Player.txt");
+        
+        // Parse Enemies.txt frame data (690 ints = 15 types × 46 ints each)
+        let enemy_frames = Self::load_enemy_frames("../base/c64/Enemies.txt");
         
         // Spawn Player
         world.spawn((
@@ -112,6 +135,36 @@ impl Game {
                         }
                     }
                 }
+
+                // Spawn enemies from level data
+                const MAX_ENEMIES: usize = 50;
+                for i in 0..MAX_ENEMIES {
+                    if stage.enemy_in_use[i] != 0 {
+                        let etype = stage.enemy_type[i] as u32;
+                        let (col_w, col_h) = if etype >= 1 && (etype as usize - 1) < enemy_frames.len() {
+                            let ef = &enemy_frames[etype as usize - 1];
+                            (ef.col_w, ef.col_h)
+                        } else {
+                            (32.0, 32.0)
+                        };
+                        world.spawn((
+                            Enemy {
+                                enemy_type: etype,
+                                alive: true,
+                                direction: stage.enemy_direction[i],
+                                anim_frame: 0,
+                                anim_timer: 0,
+                            },
+                            Position {
+                                x: stage.enemy_pos_x[i] as f32,
+                                y: stage.enemy_pos_y[i] as f32,
+                            },
+                            Velocity { vx: 0.0, vy: 0.0 },
+                            Collider { width: col_w, height: col_h, on_ground: false },
+                        ));
+                    }
+                }
+                println!("Game: Spawned enemies from level data");
             },
             Err(e) => eprintln!("Game: Failed to load stage: {}", e),
         }
@@ -122,6 +175,7 @@ impl Game {
             tile_info,
             map,
             player_frames,
+            enemy_frames,
         }
     }
 
@@ -151,6 +205,45 @@ impl Game {
         
         println!("Loaded {} player frames", frames.len());
         frames
+    }
+
+    fn load_enemy_frames(path: &str) -> Vec<EnemyFrameData> {
+        let mut result = Vec::new();
+        let content = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => { eprintln!("Failed to load enemy frames: {}", e); return result; }
+        };
+        let nums: Vec<i32> = content
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.trim().parse::<i32>().ok())
+            .collect();
+
+        // Each enemy type: 46 ints
+        // [0] = ColW, [1] = ColH
+        // [2..18]  = 4 right frames × 4 (x,y,w,h)
+        // [18..22] = dead frame (x,y,w,h)
+        // [22..38] = 4 left frames × 4
+        // [38..46] = 8 extra ints (skipped)
+        for chunk in nums.chunks(46) {
+            if chunk.len() < 38 { break; }
+            let col_w = chunk[0] as f32;
+            let col_h = chunk[1] as f32;
+            let mut frames_right = [(0i32,0i32,0u32,0u32); 4];
+            let mut frames_left  = [(0i32,0i32,0u32,0u32); 4];
+            for i in 0..4 {
+                let base = 2 + i * 4;
+                frames_right[i] = (chunk[base], chunk[base+1], chunk[base+2] as u32, chunk[base+3] as u32);
+            }
+            let frame_dead = (chunk[18], chunk[19], chunk[20] as u32, chunk[21] as u32);
+            for i in 0..4 {
+                let base = 22 + i * 4;
+                frames_left[i] = (chunk[base], chunk[base+1], chunk[base+2] as u32, chunk[base+3] as u32);
+            }
+            result.push(EnemyFrameData { col_w, col_h, frames_right, frames_left, frame_dead });
+        }
+        println!("Loaded {} enemy types", result.len());
+        result
     }
 }
 
@@ -244,14 +337,117 @@ impl GameState for Game {
         
         if found_player {
              // Center player: camera_x = player_x - screen_width/2
-             let target_cam_x = player_x - 350.0; // 800/2 roughly (actually 400, but let's shift it)
+             let target_cam_x = player_x - 350.0;
              // Smooth follow (Lerp)
              self.camera_x += (target_cam_x - self.camera_x) * 0.1;
-             
-             // Clamp to map bounds (0 to MapWidthPixels - ScreenWidth)
-             // Map is 256 tiles * 16 = 4096 px. Screen is 800.
+             // Clamp to map bounds
              if self.camera_x < 0.0 { self.camera_x = 0.0; }
              if self.camera_x > (4096.0 - 800.0) { self.camera_x = 4096.0 - 800.0; }
+        }
+
+        // --- 4. Enemy AI System ---
+        const ENEMY_SPEED: f32 = 2.5;
+        let map = &self.map;
+        let tile_info = &self.tile_info;
+
+        for (pos, vel, collider, enemy) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider, &mut Enemy)>() {
+            if !enemy.alive { continue; }
+
+            // Gravity
+            vel.vy += GRAVITY;
+            if vel.vy > TERMINAL_VELOCITY { vel.vy = TERMINAL_VELOCITY; }
+
+            // Horizontal walk: direction 1 = right, 0 = left
+            vel.vx = if enemy.direction == 1 { ENEMY_SPEED } else { -ENEMY_SPEED };
+
+            collider.on_ground = false;
+
+            // X axis: move and check wall collision
+            pos.x += vel.vx;
+            let old_vx = vel.vx;
+            check_map_collision(map, tile_info, pos, vel, collider, true);
+            // If vx was zeroed by collision, reverse direction
+            if old_vx != 0.0 && vel.vx == 0.0 {
+                enemy.direction = if enemy.direction == 1 { 0 } else { 1 };
+            }
+
+            // Y axis
+            pos.y += vel.vy;
+            check_map_collision(map, tile_info, pos, vel, collider, false);
+
+            // Animation: cycle 0-3 every 8 frames
+            enemy.anim_timer += 1;
+            if enemy.anim_timer >= 8 {
+                enemy.anim_timer = 0;
+                enemy.anim_frame = (enemy.anim_frame + 1) % 4;
+            }
+        }
+
+        // --- 5. Player-Enemy Stomp Collision ---
+        // Collect player state
+        let mut player_pos_x = 0.0f32;
+        let mut player_pos_y = 0.0f32;
+        let mut player_w = 28.0f32;
+        let mut player_h = 42.0f32;
+        let mut player_vy = 0.0f32;
+        let mut player_entity = None;
+
+        let mut player_query = self.world.query::<(hecs::Entity, &Position, &Collider, &Velocity, &Player)>();
+        for (entity, pos, collider, vel, _player) in player_query.iter() {
+            player_pos_x = pos.x;
+            player_pos_y = pos.y;
+            player_w = collider.width;
+            player_h = collider.height;
+            player_vy = vel.vy;
+            player_entity = Some(entity);
+            break;
+        }
+
+        if let Some(player_ent) = player_entity {
+            // Collect enemies to kill or damage
+            let mut stomp_targets = Vec::new();
+            let mut damage_player = false;
+
+            let mut enemy_query = self.world.query::<(hecs::Entity, &Position, &Collider, &Enemy)>();
+            for (entity, pos, collider, enemy) in enemy_query.iter() {
+                if !enemy.alive { continue; }
+
+                // AABB overlap check
+                let px1 = player_pos_x;
+                let px2 = player_pos_x + player_w;
+                let py1 = player_pos_y;
+                let py2 = player_pos_y + player_h;
+                let ex1 = pos.x;
+                let ex2 = pos.x + collider.width;
+                let ey1 = pos.y;
+                let ey2 = pos.y + collider.height;
+
+                if px1 < ex2 && px2 > ex1 && py1 < ey2 && py2 > ey1 {
+                    // Stomp: player falling onto top of enemy
+                    if player_vy > 0.0 && py2 <= ey1 + 8.0 {
+                        stomp_targets.push(entity);
+                    } else {
+                        damage_player = true;
+                    }
+                }
+            }
+
+            // Kill stomped enemies
+            for entity in stomp_targets {
+                if let Ok(mut enemy) = self.world.get::<&mut Enemy>(entity) {
+                    enemy.alive = false;
+                }
+                // Bounce player
+                if let Ok(mut vel) = self.world.get::<&mut Velocity>(player_ent) {
+                    vel.vy = -8.0;
+                }
+            }
+
+            if damage_player {
+                // For now: just log. Future: reduce health / respawn.
+                // eprintln!("Player hit by enemy!");
+                let _ = damage_player; // suppress unused warning
+            }
         }
 
         StateTransition::None
@@ -286,7 +482,6 @@ impl GameState for Game {
         for (pos, _collider, anim, _player) in self.world.query::<(&Position, &Collider, &Animation, &Player)>().iter() {
             let screen_x = pos.x - self.camera_x;
             
-            // Look up frame index: Direction(0=R,1=L) * 5 + Stance(0=Stand,1=Walk1,2=Walk2,3=Jump)
             let dir_offset = match anim.direction {
                 PlayerDirection::Right => 0,
                 PlayerDirection::Left  => 5,
@@ -309,6 +504,31 @@ impl GameState for Game {
             let dest = Rect::new(screen_x as i32, pos.y as i32, sw, sh);
             
             canvas.copy(resources.player_texture, src, dest)?;
+        }
+
+        // Draw Enemies
+        for (pos, enemy) in self.world.query::<(&Position, &Enemy)>().iter() {
+            let screen_x = pos.x - self.camera_x;
+            // Cull off-screen enemies
+            if screen_x < -64.0 || screen_x > 864.0 { continue; }
+
+            let etype_idx = (enemy.enemy_type as usize).saturating_sub(1);
+            if etype_idx >= self.enemy_frames.len() { continue; }
+            let fd = &self.enemy_frames[etype_idx];
+
+            let (sx, sy, sw, sh) = if !enemy.alive {
+                fd.frame_dead
+            } else if enemy.direction == 1 {
+                fd.frames_right[enemy.anim_frame % 4]
+            } else {
+                fd.frames_left[enemy.anim_frame % 4]
+            };
+
+            if sw == 0 || sh == 0 { continue; } // skip zero-size frames
+
+            let src  = Rect::new(sx, sy, sw, sh);
+            let dest = Rect::new(screen_x as i32, pos.y as i32, sw, sh);
+            canvas.copy(resources.enemies_texture, src, dest)?;
         }
 
         Ok(())

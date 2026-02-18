@@ -58,6 +58,12 @@ pub fn main() -> Result<(), String> {
         Ok(t) => t,
         Err(e) => return Err(format!("Failed to load player: {}", e)),
     };
+
+    let enemies_path = "../base/c64/Enemies.png";
+    let enemies_texture = match AssetManager::load_texture(&texture_creator, enemies_path) {
+        Ok(t) => t,
+        Err(e) => return Err(format!("Failed to load enemies: {}", e)),
+    };
     
     // Load Tile Properties
     let tile_props_path = "../base/Tilesheetinfo.tsi";
@@ -120,6 +126,7 @@ pub fn main() -> Result<(), String> {
             font_texture: &font_texture,
             tiles_texture: &tiles_texture,
             player_texture: &player_texture,
+            enemies_texture: &enemies_texture,
         };
         state_manager.draw(&mut canvas, &resources)?;
 
