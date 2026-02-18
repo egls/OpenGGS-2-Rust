@@ -270,15 +270,18 @@ impl GameState for Game {
 
         for (pos, vel, collider, anim) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider, &mut Animation)>().with::<&Player>() {
             // --- Input ---
-            if input.keys_pressed.contains(&Keycode::Left) {
-                vel.vx -= ACCELERATION;
-                if vel.vx < -MAX_RUN_SPEED { vel.vx = -MAX_RUN_SPEED; }
-                anim.direction = PlayerDirection::Left;
-            }
-            if input.keys_pressed.contains(&Keycode::Right) {
+            let pressing_left  = input.keys_pressed.contains(&Keycode::Left);
+            let pressing_right = input.keys_pressed.contains(&Keycode::Right);
+
+            if pressing_right {
                 vel.vx += ACCELERATION;
                 if vel.vx > MAX_RUN_SPEED { vel.vx = MAX_RUN_SPEED; }
                 anim.direction = PlayerDirection::Right;
+            }
+            if pressing_left {
+                vel.vx -= ACCELERATION;
+                if vel.vx < -MAX_RUN_SPEED { vel.vx = -MAX_RUN_SPEED; }
+                anim.direction = PlayerDirection::Left;
             }
             if input.keys_pressed.contains(&Keycode::Space) && collider.on_ground {
                 vel.vy = -JUMP_STRENGTH;
@@ -286,22 +289,20 @@ impl GameState for Game {
 
             // Apply Gravity
             vel.vy += GRAVITY;
-            
-            // Limit Fall Speed (Terminal Velocity)
-            if vel.vy > TERMINAL_VELOCITY {
-                vel.vy = TERMINAL_VELOCITY;
+            if vel.vy > TERMINAL_VELOCITY { vel.vy = TERMINAL_VELOCITY; }
+
+            // Apply Friction only when no key is held (decelerate to stop)
+            if !pressing_left && !pressing_right {
+                if vel.vx > 0.0 {
+                    vel.vx -= FRICTION;
+                    if vel.vx < 0.0 { vel.vx = 0.0; }
+                } else if vel.vx < 0.0 {
+                    vel.vx += FRICTION;
+                    if vel.vx > 0.0 { vel.vx = 0.0; }
+                }
             }
 
-            // Apply Friction
-            if vel.vx > 0.0 {
-                vel.vx -= FRICTION;
-                if vel.vx < 0.0 { vel.vx = 0.0; }
-            } else if vel.vx < 0.0 {
-                vel.vx += FRICTION;
-                if vel.vx > 0.0 { vel.vx = 0.0; }
-            }
-
-            collider.on_ground = false; // Reset ground state
+            collider.on_ground = false;
 
             // --- X Axis Move & Collide ---
             pos.x += vel.vx;
@@ -315,7 +316,6 @@ impl GameState for Game {
             if !collider.on_ground {
                 anim.stance = PlayerStance::Jump;
             } else if vel.vx.abs() > 0.1 {
-                // Walk: alternate Walk1/Walk2 every 8 frames
                 anim.walk_timer += 1;
                 if anim.walk_timer >= 16 { anim.walk_timer = 0; }
                 anim.stance = if anim.walk_timer < 8 { PlayerStance::Walk1 } else { PlayerStance::Walk2 };
@@ -404,50 +404,45 @@ impl GameState for Game {
         }
 
         if let Some(player_ent) = player_entity {
-            // Collect enemies to kill or damage
+            // Collect enemies to kill or damage — query dropped before world.get()
             let mut stomp_targets = Vec::new();
             let mut damage_player = false;
 
-            let mut enemy_query = self.world.query::<(hecs::Entity, &Position, &Collider, &Enemy)>();
-            for (entity, pos, collider, enemy) in enemy_query.iter() {
-                if !enemy.alive { continue; }
+            {
+                let mut enemy_query = self.world.query::<(hecs::Entity, &Position, &Collider, &Enemy)>();
+                for (entity, pos, collider, enemy) in enemy_query.iter() {
+                    if !enemy.alive { continue; }
 
-                // AABB overlap check
-                let px1 = player_pos_x;
-                let px2 = player_pos_x + player_w;
-                let py1 = player_pos_y;
-                let py2 = player_pos_y + player_h;
-                let ex1 = pos.x;
-                let ex2 = pos.x + collider.width;
-                let ey1 = pos.y;
-                let ey2 = pos.y + collider.height;
+                    let px1 = player_pos_x;
+                    let px2 = player_pos_x + player_w;
+                    let py1 = player_pos_y;
+                    let py2 = player_pos_y + player_h;
+                    let ex1 = pos.x;
+                    let ex2 = pos.x + collider.width;
+                    let ey1 = pos.y;
+                    let ey2 = pos.y + collider.height;
 
-                if px1 < ex2 && px2 > ex1 && py1 < ey2 && py2 > ey1 {
-                    // Stomp: player falling onto top of enemy
-                    if player_vy > 0.0 && py2 <= ey1 + 8.0 {
-                        stomp_targets.push(entity);
-                    } else {
-                        damage_player = true;
+                    if px1 < ex2 && px2 > ex1 && py1 < ey2 && py2 > ey1 {
+                        if player_vy > 0.0 && py2 <= ey1 + 8.0 {
+                            stomp_targets.push(entity);
+                        } else {
+                            damage_player = true;
+                        }
                     }
                 }
-            }
+            } // enemy_query dropped here — safe to call world.get() below
 
             // Kill stomped enemies
             for entity in stomp_targets {
                 if let Ok(mut enemy) = self.world.get::<&mut Enemy>(entity) {
                     enemy.alive = false;
                 }
-                // Bounce player
                 if let Ok(mut vel) = self.world.get::<&mut Velocity>(player_ent) {
                     vel.vy = -8.0;
                 }
             }
 
-            if damage_player {
-                // For now: just log. Future: reduce health / respawn.
-                // eprintln!("Player hit by enemy!");
-                let _ = damage_player; // suppress unused warning
-            }
+            let _ = damage_player;
         }
 
         StateTransition::None
