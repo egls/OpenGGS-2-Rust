@@ -87,6 +87,7 @@ pub struct Game {
     map: [[i32; 30]; 256],
     player_frames: Vec<Frame>,
     enemy_frames: Vec<EnemyFrameData>,  // index 0 = type 1
+    stomp_bounce: bool,  // set when player stomps an enemy; applied next physics tick
 }
 
 impl Game {
@@ -176,6 +177,7 @@ impl Game {
             map,
             player_frames,
             enemy_frames,
+            stomp_bounce: false,
         }
     }
 
@@ -269,6 +271,12 @@ impl GameState for Game {
         let tile_info = &self.tile_info;
 
         for (pos, vel, collider, anim) in self.world.query_mut::<(&mut Position, &mut Velocity, &mut Collider, &mut Animation)>().with::<&Player>() {
+            // Apply stomp bounce from previous frame
+            if self.stomp_bounce {
+                vel.vy = -8.0;
+                self.stomp_bounce = false;
+            }
+
             // --- Input ---
             let pressing_left  = input.keys_pressed.contains(&Keycode::Left);
             let pressing_right = input.keys_pressed.contains(&Keycode::Right);
@@ -403,46 +411,39 @@ impl GameState for Game {
             break;
         }
 
-        if let Some(player_ent) = player_entity {
-            // Collect enemies to kill or damage — query dropped before world.get()
+        if let Some(_player_ent) = player_entity {
             let mut stomp_targets = Vec::new();
-            let mut damage_player = false;
 
             {
                 let mut enemy_query = self.world.query::<(hecs::Entity, &Position, &Collider, &Enemy)>();
                 for (entity, pos, collider, enemy) in enemy_query.iter() {
                     if !enemy.alive { continue; }
 
-                    let px1 = player_pos_x;
                     let px2 = player_pos_x + player_w;
-                    let py1 = player_pos_y;
                     let py2 = player_pos_y + player_h;
                     let ex1 = pos.x;
                     let ex2 = pos.x + collider.width;
                     let ey1 = pos.y;
                     let ey2 = pos.y + collider.height;
 
-                    if px1 < ex2 && px2 > ex1 && py1 < ey2 && py2 > ey1 {
+                    if player_pos_x < ex2 && px2 > ex1 && player_pos_y < ey2 && py2 > ey1 {
                         if player_vy > 0.0 && py2 <= ey1 + 8.0 {
                             stomp_targets.push(entity);
-                        } else {
-                            damage_player = true;
                         }
+                        // side collision: could reduce health here later
                     }
                 }
-            } // enemy_query dropped here — safe to call world.get() below
+            } // enemy_query dropped
 
-            // Kill stomped enemies
-            for entity in stomp_targets {
-                if let Ok(mut enemy) = self.world.get::<&mut Enemy>(entity) {
-                    enemy.alive = false;
-                }
-                if let Ok(mut vel) = self.world.get::<&mut Velocity>(player_ent) {
-                    vel.vy = -8.0;
+            // Kill stomped enemies and set bounce flag (applied next player physics tick)
+            if !stomp_targets.is_empty() {
+                self.stomp_bounce = true;
+                for entity in stomp_targets {
+                    if let Ok(mut enemy) = self.world.get::<&mut Enemy>(entity) {
+                        enemy.alive = false;
+                    }
                 }
             }
-
-            let _ = damage_player;
         }
 
         StateTransition::None
