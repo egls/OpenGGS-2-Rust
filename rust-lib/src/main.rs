@@ -1,6 +1,18 @@
 use bevy::prelude::*;
 
+mod assets;
+mod level;
+mod menu;
+mod player;
 mod states;
+mod tile_properties;
+mod tilemap;
+
+use assets::AssetsPlugin;
+use menu::MenuPlugin;
+use player::PlayerPlugin;
+use states::GameState;
+use tilemap::TileMapPlugin;
 
 fn main() {
     App::new()
@@ -15,8 +27,14 @@ fn main() {
                     }),
                     ..default()
                 })
-                .set(ImagePlugin::default_nearest()), // pixel-perfect sprites
+                .set(ImagePlugin::default_nearest()),
         )
-        .init_state::<states::GameState>()
+        .init_state::<GameState>()
+        .add_plugins((
+            AssetsPlugin,
+            MenuPlugin,
+            TileMapPlugin,
+            PlayerPlugin,
+        ))
         .run();
 }
