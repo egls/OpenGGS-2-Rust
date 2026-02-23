@@ -103,6 +103,7 @@ fn spawn_enemies(
                 image: assets.enemies.clone(),
                 rect: initial_rect,
                 custom_size: Some(Vec2::new(col_w, col_h)),
+                anchor: bevy::sprite::Anchor::TopLeft,
                 ..default()
             },
             Transform::from_xyz(ex, ey, 0.5),

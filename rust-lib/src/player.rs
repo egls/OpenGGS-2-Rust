@@ -123,6 +123,7 @@ fn spawn_player(
         Sprite {
             image: assets.player.clone(),
             rect: initial_rect,
+            anchor: bevy::sprite::Anchor::TopLeft,
             ..default()
         },
         Transform::from_xyz(start_x, start_y, 1.0),

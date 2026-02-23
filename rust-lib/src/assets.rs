@@ -71,6 +71,7 @@ fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
 fn check_loading(
     assets_opt:   Option<Res<GameAssets>>,
     asset_server: Res<AssetServer>,
+    mut images:       ResMut<Assets<Image>>,
     mut next:     ResMut<NextState<GameState>>,
 ) {
     use bevy::asset::LoadState;
@@ -98,6 +99,25 @@ fn check_loading(
 
     let all_loaded = states.iter().all(|s| matches!(s, Some(LoadState::Loaded)));
     if all_loaded {
+        process_transparency(&assets, &mut images);
         next.set(GameState::Menu);
+    }
+}
+
+fn process_transparency(assets: &GameAssets, images: &mut Assets<Image>) {
+    let handles = [&assets.tiles, &assets.player, &assets.enemies];
+    for handle in handles {
+        if let Some(image) = images.get_mut(handle) {
+            // Assume RGBA8
+            for pixel in image.data.chunks_exact_mut(4) {
+                // Magenta: 255, 0, 255
+                if pixel[0] == 255 && pixel[1] == 0 && pixel[2] == 255 {
+                    pixel[0] = 0;
+                    pixel[1] = 0;
+                    pixel[2] = 0;
+                    pixel[3] = 0;
+                }
+            }
+        }
     }
 }

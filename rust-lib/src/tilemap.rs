@@ -66,6 +66,7 @@ fn spawn_tiles(
                     image: assets.tiles.clone(),
                     rect: Some(Rect::new(src_x, src_y, src_x + TILE_W, src_y + TILE_H)),
                     custom_size: Some(Vec2::new(TILE_W, TILE_H)),
+                    anchor: bevy::sprite::Anchor::TopLeft,
                     ..default()
                 },
                 Transform::from_xyz(px, py, 0.0),
