@@ -57,7 +57,7 @@ impl Plugin for EnemyPlugin {
         app.add_event::<StompEvent>()
            .add_systems(OnEnter(GameState::InGame), spawn_enemies)
            .add_systems(
-               Update,
+               FixedUpdate,
                (enemy_ai, stomp_detection, handle_stomp)
                    .chain()
                    .run_if(in_state(GameState::InGame)),

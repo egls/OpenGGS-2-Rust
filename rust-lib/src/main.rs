@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 
 mod assets;
 mod audio;
@@ -45,6 +46,8 @@ fn main() {
             HudPlugin,
             audio::AudioPlugin,
             game_over::GameOverPlugin,
+            FrameTimeDiagnosticsPlugin::default(),
+            LogDiagnosticsPlugin::default(),
         ))
         .run();
 }

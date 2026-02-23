@@ -71,16 +71,22 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::InGame), spawn_player)
            .add_systems(
-               Update,
+               FixedUpdate,
                (
                    player_input,
                    apply_gravity,
                    apply_movement,
+               )
+                   .chain()
+                   .run_if(in_state(GameState::InGame)),
+           )
+           .add_systems(
+               Update,
+               (
                    update_animation,
                    update_player_sprite,
                    check_death,
                )
-                   .chain()
                    .run_if(in_state(GameState::InGame)),
            );
     }
