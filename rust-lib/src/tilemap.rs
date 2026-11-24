@@ -962,12 +962,16 @@ const PAUSE_OPTIONS: [&str; 3] = ["RESUME", "RESTART STAGE", "MAIN MENU"];
 fn toggle_pause(
     mut commands: Commands,
     keys:         Res<ButtonInput<KeyCode>>,
+    gamepads:     Query<&Gamepad>,
     mut paused:   ResMut<GamePaused>,
     mut sel:      ResMut<PauseSelection>,
     mut sfx:      EventWriter<SfxEvent>,
     overlay_q:    Query<Entity, With<PauseMenuRoot>>,
 ) {
-    if keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyP) {
+    if keys.just_pressed(KeyCode::Escape)
+        || keys.just_pressed(KeyCode::KeyP)
+        || crate::input::any_gamepad_just_pause(&gamepads)
+    {
         paused.0 = !paused.0;
         sel.0 = 0;
         sfx.send(SfxEvent(SfxKind::Click));
@@ -1013,9 +1017,11 @@ fn spawn_pause_overlay(commands: &mut Commands) {
         });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn pause_menu_input(
     mut commands: Commands,
     keys:         Res<ButtonInput<KeyCode>>,
+    gamepads:     Query<&Gamepad>,
     mut paused:   ResMut<GamePaused>,
     mut sel:      ResMut<PauseSelection>,
     mut level:    ResMut<LevelData>,
@@ -1029,10 +1035,10 @@ fn pause_menu_input(
     }
 
     let mut changed = false;
-    if keys.just_pressed(KeyCode::ArrowDown) {
+    if keys.just_pressed(KeyCode::ArrowDown) || crate::input::any_gamepad_nav_down(&gamepads) {
         sel.0 = (sel.0 + 1) % PAUSE_OPTIONS.len();
         changed = true;
-    } else if keys.just_pressed(KeyCode::ArrowUp) {
+    } else if keys.just_pressed(KeyCode::ArrowUp) || crate::input::any_gamepad_nav_up(&gamepads) {
         sel.0 = (sel.0 + PAUSE_OPTIONS.len() - 1) % PAUSE_OPTIONS.len();
         changed = true;
     }
@@ -1051,7 +1057,10 @@ fn pause_menu_input(
         }
     }
 
-    if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
+    if keys.just_pressed(KeyCode::Enter)
+        || keys.just_pressed(KeyCode::Space)
+        || crate::input::any_gamepad_confirm(&gamepads)
+    {
         sfx.send(SfxEvent(SfxKind::Click));
         paused.0 = false;
         for e in &overlay_q {

@@ -204,7 +204,7 @@ fn update_bgm_track(
 ) {
     let desired = match state.get() {
         GameState::Loading => return,
-        GameState::Menu | GameState::Options => MusicTrack::Title,
+        GameState::Menu | GameState::Options | GameState::Story | GameState::Credits => MusicTrack::Title,
         GameState::StageTransition | GameState::InGame => {
             let bg = level_opt.map(|l| l.stage.background_colour).unwrap_or(0);
             if bg == 0 { MusicTrack::Outdoors } else { MusicTrack::Indoors }

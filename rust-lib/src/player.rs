@@ -160,15 +160,20 @@ fn reset_input_buffer(mut input_buf: ResMut<PlayerInputBuffer>) {
 
 fn buffer_player_input(
     keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
     mut input_buf: ResMut<PlayerInputBuffer>,
 ) {
-    if keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::ArrowUp) {
+    if keys.just_pressed(KeyCode::Space)
+        || keys.just_pressed(KeyCode::ArrowUp)
+        || crate::input::any_gamepad_just_jump(&gamepads)
+    {
         input_buf.jump_requested = true;
     }
     if keys.just_pressed(KeyCode::ControlLeft)
         || keys.just_pressed(KeyCode::ControlRight)
         || keys.just_pressed(KeyCode::KeyX)
         || keys.just_pressed(KeyCode::KeyF)
+        || crate::input::any_gamepad_just_shoot(&gamepads)
     {
         input_buf.shoot_requested = true;
     }
@@ -287,9 +292,11 @@ pub const PLAYER_H: f32 = 42.0;
 
 // ── Systems ───────────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn player_input(
     time:            Res<Time<Fixed>>,
     keys:            Res<ButtonInput<KeyCode>>,
+    gamepads:        Query<&Gamepad>,
     mut input_buf:   ResMut<PlayerInputBuffer>,
     hud:             Res<HudState>,
     mut sfx:         EventWriter<SfxEvent>,
@@ -318,8 +325,8 @@ fn player_input(
         pstate.coyote_timer = (pstate.coyote_timer - dt).max(0.0);
     }
 
-    let left  = keys.pressed(KeyCode::ArrowLeft);
-    let right = keys.pressed(KeyCode::ArrowRight);
+    let left  = keys.pressed(KeyCode::ArrowLeft) || crate::input::any_gamepad_left_held(&gamepads);
+    let right = keys.pressed(KeyCode::ArrowRight) || crate::input::any_gamepad_right_held(&gamepads);
 
     if right {
         vel.vx = (vel.vx + ACCELERATION).min(MAX_RUN_SPEED);
@@ -386,8 +393,9 @@ pub fn resolve_warp_target(current_stage: usize, stage_warp_to: i32) -> usize {
 }
 
 fn apply_gravity(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut q: Query<(&mut Velocity, &OnGround, &PlayerState), With<Player>>,
+    keys:     Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
+    mut q:    Query<(&mut Velocity, &OnGround, &PlayerState), With<Player>>,
 ) {
     let Ok((mut vel, on_ground, pstate)) = q.get_single_mut() else { return };
     if pstate.warp_timer > 0.0 {
@@ -395,8 +403,11 @@ fn apply_gravity(
         vel.vy = 0.0;
         return;
     }
-    let jump_held = keys.pressed(KeyCode::Space) || keys.pressed(KeyCode::ArrowUp);
-    let down_held = keys.pressed(KeyCode::ArrowDown);
+    let jump_held = keys.pressed(KeyCode::Space)
+        || keys.pressed(KeyCode::ArrowUp)
+        || crate::input::any_gamepad_jump_held(&gamepads);
+    let down_held = keys.pressed(KeyCode::ArrowDown)
+        || crate::input::any_gamepad_down_held(&gamepads);
     vel.vy = step_player_vertical_velocity(vel.vy, pstate.alive, on_ground.0, jump_held, down_held);
 }
 

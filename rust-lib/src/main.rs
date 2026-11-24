@@ -6,12 +6,14 @@ mod audio;
 mod enemy;
 mod game_over;
 mod hud;
+mod input;
 mod level;
 mod menu;
 mod options;
 mod paths;
 mod player;
 mod powerup;
+mod screens;
 mod states;
 mod tile_properties;
 mod tilemap;
@@ -54,6 +56,7 @@ fn main() {
             AssetsPlugin,
             MenuPlugin,
             options::OptionsPlugin,
+            screens::ScreensPlugin,
             TileMapPlugin,
             PlayerPlugin,
             EnemyPlugin,

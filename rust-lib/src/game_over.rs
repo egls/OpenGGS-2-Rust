@@ -67,16 +67,20 @@ fn spawn_game_over(mut commands: Commands, hud: Res<HudState>) {
 
 fn game_over_input(
     keys:           Res<ButtonInput<KeyCode>>,
+    gamepads:       Query<&Gamepad>,
     mut next_state: ResMut<NextState<GameState>>,
     mut hud:        ResMut<HudState>,
     mut level:      ResMut<LevelData>,
 ) {
-    if keys.just_pressed(KeyCode::KeyR) {
+    if keys.just_pressed(KeyCode::KeyR) || crate::input::any_gamepad_confirm(&gamepads) {
         hud.reset();
         level.checkpoint = 0;
         next_state.set(GameState::StageTransition);
     }
-    if keys.just_pressed(KeyCode::KeyM) {
+    if keys.just_pressed(KeyCode::KeyM)
+        || keys.just_pressed(KeyCode::Escape)
+        || crate::input::any_gamepad_cancel(&gamepads)
+    {
         next_state.set(GameState::Menu);
     }
 }

@@ -8,8 +8,12 @@ pub enum GameState {
     Loading,
     /// Main menu is shown (with level pack selector and Options).
     Menu,
-    /// Options screen (SFX / Music volume & level pack).
+    /// Options screen (SFX / Music volume, resolution, fullscreen & level pack).
     Options,
+    /// Original background story screen.
+    Story,
+    /// Original credits screen.
+    Credits,
     /// Reloads target stage data and shows a brief stage banner before gameplay.
     StageTransition,
     /// Gameplay is active.

@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::assets::{GameAssets, LevelData};
 use crate::audio::{SfxEvent, SfxKind};
 use crate::hud::HudState;
+use crate::input;
 use crate::states::GameState;
 
 pub struct MenuPlugin;
@@ -25,7 +26,7 @@ struct MenuItemText(usize);
 #[derive(Resource, Default)]
 struct MenuSelection(usize);
 
-const MENU_ITEM_COUNT: usize = 4;
+const MENU_ITEM_COUNT: usize = 6;
 
 fn format_menu_item(idx: usize, selected: usize, pack_name: &str) -> String {
     let prefix = if idx == selected { "> " } else { "  " };
@@ -33,6 +34,8 @@ fn format_menu_item(idx: usize, selected: usize, pack_name: &str) -> String {
         0 => format!("{}START GAME", prefix),
         1 => format!("{}STAGE PACK: < {} >", prefix, pack_name),
         2 => format!("{}OPTIONS", prefix),
+        3 => format!("{}STORY", prefix),
+        4 => format!("{}CREDITS", prefix),
         _ => format!("{}QUIT", prefix),
     }
 }
@@ -49,6 +52,8 @@ fn menu_icon_rect(idx: usize) -> Rect {
         0 => (256.0, 240.0), // Start / Resume
         1 => (256.0, 208.0), // Load Stagefile
         2 => (288.0, 208.0), // Options
+        3 => (256.0, 272.0), // Story
+        4 => (320.0, 208.0), // Credits
         _ => (288.0, 240.0), // Quit
     };
     Rect::new(x, y, x + 32.0, y + 32.0)
@@ -130,8 +135,10 @@ fn spawn_menu(
         });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn menu_input(
     keys:       Res<ButtonInput<KeyCode>>,
+    gamepads:   Query<&Gamepad>,
     mut sel:    ResMut<MenuSelection>,
     mut next:   ResMut<NextState<GameState>>,
     mut hud:    ResMut<HudState>,
@@ -140,24 +147,25 @@ fn menu_input(
     mut exit:   EventWriter<AppExit>,
     mut text_q: Query<(&MenuItemText, &mut Text, &mut TextColor)>,
 ) {
+    let alt = keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight);
     let mut dirty = false;
 
-    if keys.just_pressed(KeyCode::ArrowDown) {
+    if keys.just_pressed(KeyCode::ArrowDown) || input::any_gamepad_nav_down(&gamepads) {
         sel.0 = (sel.0 + 1) % MENU_ITEM_COUNT;
         dirty = true;
-    } else if keys.just_pressed(KeyCode::ArrowUp) {
+    } else if keys.just_pressed(KeyCode::ArrowUp) || input::any_gamepad_nav_up(&gamepads) {
         sel.0 = (sel.0 + MENU_ITEM_COUNT - 1) % MENU_ITEM_COUNT;
         dirty = true;
     }
 
     if sel.0 == 1 {
         let count = level.pack_count();
-        if keys.just_pressed(KeyCode::ArrowLeft) {
+        if keys.just_pressed(KeyCode::ArrowLeft) || input::any_gamepad_nav_left(&gamepads) {
             let idx = (level.pack_index + count - 1) % count;
             level.set_pack(idx);
             sfx.send(SfxEvent(SfxKind::Disk));
             dirty = true;
-        } else if keys.just_pressed(KeyCode::ArrowRight) {
+        } else if keys.just_pressed(KeyCode::ArrowRight) || input::any_gamepad_nav_right(&gamepads) {
             let idx = (level.pack_index + 1) % count;
             level.set_pack(idx);
             sfx.send(SfxEvent(SfxKind::Disk));
@@ -177,7 +185,11 @@ fn menu_input(
         }
     }
 
-    if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
+    let confirm = (!alt && keys.just_pressed(KeyCode::Enter))
+        || keys.just_pressed(KeyCode::Space)
+        || input::any_gamepad_confirm(&gamepads);
+
+    if confirm {
         sfx.send(SfxEvent(SfxKind::Click));
         match sel.0 {
             0 => {
@@ -185,6 +197,7 @@ fn menu_input(
                 level.checkpoint = 0;
                 level.sub_stage_entry_stage = None;
                 level.sub_stage_counter = 0;
+                level.is_warping = false;
                 next.set(GameState::StageTransition);
             }
             1 => {
@@ -201,9 +214,9 @@ fn menu_input(
                     };
                 }
             }
-            2 => {
-                next.set(GameState::Options);
-            }
+            2 => next.set(GameState::Options),
+            3 => next.set(GameState::Story),
+            4 => next.set(GameState::Credits),
             _ => {
                 exit.send(AppExit::Success);
             }
