@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 
 mod assets;
 mod audio;
@@ -9,6 +8,7 @@ mod hud;
 mod level;
 mod menu;
 mod player;
+mod powerup;
 mod states;
 mod tile_properties;
 mod tilemap;
@@ -18,6 +18,7 @@ use enemy::EnemyPlugin;
 use hud::HudPlugin;
 use menu::MenuPlugin;
 use player::PlayerPlugin;
+use powerup::PowerUpPlugin;
 use states::GameState;
 use tilemap::TileMapPlugin;
 
@@ -43,11 +44,10 @@ fn main() {
             TileMapPlugin,
             PlayerPlugin,
             EnemyPlugin,
+            PowerUpPlugin,
             HudPlugin,
             audio::AudioPlugin,
             game_over::GameOverPlugin,
-            FrameTimeDiagnosticsPlugin::default(),
-            LogDiagnosticsPlugin::default(),
         ))
         .run();
 }

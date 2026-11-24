@@ -59,3 +59,51 @@ pub fn load_stage(file_path: &str, stage_index: usize) -> io::Result<ImportStage
     file.read_exact(buffer)?;
     Ok(stage)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn import_stage_size_matches_cpp_struct() {
+        assert_eq!(mem::size_of::<ImportStage>(), 36_732);
+    }
+
+    #[test]
+    fn load_classic_stage_1() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let stage = load_stage(path.to_str().unwrap(), 1).expect("classic.lvl stage 1 should load");
+
+        let non_empty_tiles: usize = stage
+            .array
+            .iter()
+            .flat_map(|col| col.iter())
+            .filter(|&&id| id != 0)
+            .count();
+        assert!(non_empty_tiles > 0, "stage 1 should contain tiles");
+
+        assert!(stage.start_position_x[0] >= 0);
+        assert!(stage.start_position_y[0] >= 0);
+
+        let active_enemies = stage.enemy_in_use.iter().filter(|&&used| used != 0).count();
+        assert!(active_enemies > 0, "stage 1 should contain enemies");
+    }
+
+    #[test]
+    fn load_out_of_bounds_stage_fails() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        assert!(load_stage(path.to_str().unwrap(), 999).is_err());
+    }
+
+    #[test]
+    fn all_33_classic_stages_load() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        for stage_num in 1..=33 {
+            let stage = load_stage(path.to_str().unwrap(), stage_num)
+                .unwrap_or_else(|e| panic!("classic.lvl stage {} failed to load: {}", stage_num, e));
+            let has_tiles = stage.array.iter().flat_map(|c| c.iter()).any(|&id| id != 0);
+            assert!(has_tiles, "classic.lvl stage {} has no tiles", stage_num);
+        }
+    }
+}

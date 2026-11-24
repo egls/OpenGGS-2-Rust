@@ -8,8 +8,10 @@ pub enum GameState {
     Loading,
     /// Main menu is shown.
     Menu,
+    /// Reloads target stage data and shows a brief stage banner before gameplay.
+    StageTransition,
     /// Gameplay is active.
     InGame,
-    /// Game over screen.
+    /// Game over (or victory) screen.
     GameOver,
 }

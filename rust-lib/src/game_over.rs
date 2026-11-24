@@ -1,6 +1,8 @@
 use bevy::prelude::*;
-use crate::states::GameState;
+
+use crate::assets::LevelData;
 use crate::hud::HudState;
+use crate::states::GameState;
 
 pub struct GameOverPlugin;
 
@@ -16,31 +18,43 @@ impl Plugin for GameOverPlugin {
 struct GameOverRoot;
 
 fn spawn_game_over(mut commands: Commands, hud: Res<HudState>) {
+    let (headline, headline_color) = if hud.victory {
+        ("VICTORY!", Color::srgb(1.0, 0.85, 0.2))
+    } else {
+        ("GAME OVER", Color::srgb(1.0, 0.15, 0.15))
+    };
+
     commands
         .spawn((
             GameOverRoot,
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
+                width:           Val::Percent(100.0),
+                height:          Val::Percent(100.0),
+                flex_direction:  FlexDirection::Column,
+                align_items:     AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                row_gap: Val::Px(20.0),
+                row_gap:         Val::Px(18.0),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.8)),
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
         ))
         .with_children(|parent| {
             parent.spawn((
-                Text::new("GAME OVER"),
-                TextFont { font_size: 80.0, ..default() },
-                TextColor(Color::srgb(1.0, 0.1, 0.1)),
+                Text::new(headline),
+                TextFont { font_size: 76.0, ..default() },
+                TextColor(headline_color),
             ));
-            
+
             parent.spawn((
-                Text::new(format!("FINAL SCORE: {}", hud.score)),
-                TextFont { font_size: 40.0, ..default() },
+                Text::new(format!("FINAL SCORE: {}  |  COINS: {}", hud.score, hud.coins)),
+                TextFont { font_size: 32.0, ..default() },
                 TextColor(Color::WHITE),
+            ));
+
+            parent.spawn((
+                Text::new(format!("STAGE REACHED: {}", hud.stage)),
+                TextFont { font_size: 24.0, ..default() },
+                TextColor(Color::srgb(0.8, 0.85, 1.0)),
             ));
 
             parent.spawn((
@@ -52,15 +66,15 @@ fn spawn_game_over(mut commands: Commands, hud: Res<HudState>) {
 }
 
 fn game_over_input(
-    keys: Res<ButtonInput<KeyCode>>,
+    keys:           Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut hud: ResMut<HudState>,
+    mut hud:        ResMut<HudState>,
+    mut level:      ResMut<LevelData>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
-        // Reset HUD and restart game
-        hud.score = 0;
-        hud.lives = 3;
-        next_state.set(GameState::InGame);
+        hud.reset();
+        level.checkpoint = 0;
+        next_state.set(GameState::StageTransition);
     }
     if keys.just_pressed(KeyCode::KeyM) {
         next_state.set(GameState::Menu);

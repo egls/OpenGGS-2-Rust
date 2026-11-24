@@ -50,3 +50,28 @@ pub fn load_tile_properties(file_path: &str) -> io::Result<TileSheetInfo> {
     }
     Ok(info)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn tilesheet_info_size_matches_tsi_file() {
+        assert_eq!(mem::size_of::<TileSheetInfo>(), 30_188);
+    }
+
+    #[test]
+    fn load_tilesheet_properties_from_base() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Tilesheetinfo.tsi");
+        let info = load_tile_properties(path.to_str().unwrap())
+            .expect("Tilesheetinfo.tsi should load");
+
+        assert_eq!(info.tile_width, 16);
+        assert_eq!(info.tile_height, 16);
+        assert!(info.solid.iter().any(|&v| v != 0), "expected solid tiles");
+        assert!(info.exit.iter().any(|&v| v != 0), "expected exit tiles");
+        assert!(info.coin.iter().any(|&v| v != 0), "expected coin tiles");
+        assert!(info.lethal.iter().any(|&v| v != 0), "expected lethal tiles");
+    }
+}

@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::assets::LevelData;
+use crate::hud::HudState;
 use crate::states::GameState;
 
 pub struct MenuPlugin;
@@ -42,6 +44,11 @@ fn spawn_menu(mut commands: Commands) {
                 TextColor(Color::WHITE),
             ));
             parent.spawn((
+                Text::new("Arrows: Move | Space/Up: Jump | Ctrl/X: Shoot | ESC: Menu"),
+                TextFont { font_size: 16.0, ..default() },
+                TextColor(Color::srgb(0.75, 0.8, 0.9)),
+            ));
+            parent.spawn((
                 Text::new("Press ESC to Quit"),
                 TextFont { font_size: 20.0, ..default() },
                 TextColor(Color::srgb(0.7, 0.7, 0.7)),
@@ -50,12 +57,16 @@ fn spawn_menu(mut commands: Commands) {
 }
 
 fn menu_input(
-    keys:     Res<ButtonInput<KeyCode>>,
-    mut next: ResMut<NextState<GameState>>,
-    mut exit: EventWriter<AppExit>,
+    keys:      Res<ButtonInput<KeyCode>>,
+    mut next:  ResMut<NextState<GameState>>,
+    mut hud:   ResMut<HudState>,
+    mut level: ResMut<LevelData>,
+    mut exit:  EventWriter<AppExit>,
 ) {
     if keys.just_pressed(KeyCode::Enter) {
-        next.set(GameState::InGame);
+        hud.reset();
+        level.checkpoint = 0;
+        next.set(GameState::StageTransition);
     }
     if keys.just_pressed(KeyCode::Escape) {
         exit.send(AppExit::Success);
