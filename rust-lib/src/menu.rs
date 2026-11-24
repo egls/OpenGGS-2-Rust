@@ -234,3 +234,26 @@ fn menu_input(
 fn despawn_menu(mut commands: Commands, q: Query<Entity, With<MenuRoot>>) {
     for e in &q { commands.entity(e).despawn_recursive(); }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn menu_banner_and_icon_rects_fit_original_spritesheets() {
+        // Tiles.png is 640x1200
+        let banner = std::hint::black_box(TITLE_BANNER_RECT);
+        assert!(banner.max.x <= 640.0 && banner.max.y <= 1200.0);
+        assert_eq!(banner.width(), 320.0);
+        assert_eq!(banner.height(), 200.0);
+
+        // Interface.png is 640x800
+        for idx in 0..MENU_ITEM_COUNT {
+            let r = menu_icon_rect(idx);
+            assert!(r.min.x >= 0.0 && r.max.x <= 640.0);
+            assert!(r.min.y >= 0.0 && r.max.y <= 800.0);
+            assert_eq!(r.width(), 32.0);
+            assert_eq!(r.height(), 32.0);
+        }
+    }
+}

@@ -411,7 +411,7 @@ fn apply_gravity(
     vel.vy = step_player_vertical_velocity(vel.vy, pstate.alive, on_ground.0, jump_held, down_held);
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn apply_movement(
     mut commands:     Commands,
     mut q:            Query<(&mut Transform, &mut Velocity, &mut OnGround, &mut PlayerState), With<Player>>,
@@ -604,7 +604,7 @@ fn resolve_y(
                     // Head bump: pick the tile closest to player's horizontal center
                     let tile_center = tx1 + 8.0;
                     let dist = (tile_center - center_x).abs();
-                    if best_bump.map_or(true, |(_, _, d)| dist < d) {
+                    if best_bump.is_none_or(|(_, _, d)| dist < d) {
                         best_bump = Some((tx as usize, ty as usize, dist));
                     }
                 }
@@ -686,6 +686,7 @@ fn replace_3x2_with_spent_block<F: bevy::ecs::query::QueryFilter>(
 
 /// Steps all 6 tiles of a 3×2 special block by `+3` and schedules timed frame switches
 /// (matches C++ `PC_Collision_CoinBlock`, `PC_Collision_CoinBlockHelmet`, `PC_Collision_Breakable`).
+#[allow(clippy::too_many_arguments)]
 fn step_3x2_block_plus_3<F: bevy::ecs::query::QueryFilter>(
     commands:  &mut Commands,
     tile_grid: &mut TileGrid,
@@ -1049,6 +1050,7 @@ fn tile_rect(tx: i32, ty: i32) -> (f32, f32, f32, f32) {
     (x, y, x + 16.0, y + 16.0)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn aabb(ax: f32, ay: f32, aw: f32, ah: f32, bx: f32, by: f32, bw: f32, bh: f32) -> bool {
     ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by
 }
@@ -1170,5 +1172,198 @@ mod tests {
         assert_eq!(resolve_warp_target(1, 0), 4);
         assert_eq!(resolve_warp_target(32, 0), 33);
         assert_eq!(resolve_warp_target(2, 12), 12);
+    }
+
+    #[test]
+    fn find_3x2_block_left_detects_left_center_right_and_rejects_blocked_underneath() {
+        let paths = crate::paths::AssetPaths::resolve();
+        let tile_info = crate::tile_properties::load_tile_properties(
+            paths.tilesheet_info().to_str().unwrap(),
+        )
+        .unwrap();
+        let mut stage = crate::level::ImportStage::new();
+        // Stamp 3x2 breakable block (501..503 / 541..543) at (10, 14..=15)
+        crate::random_gen::stamp_element(&mut stage, 501, 10, 14);
+
+        let mut level = LevelData {
+            stage_packs: Vec::new(),
+            pack_index: 0,
+            stage_file: std::path::PathBuf::new(),
+            stage_number: 1,
+            checkpoint: 0,
+            sub_stage_entry_stage: None,
+            sub_stage_counter: 0,
+            is_warping: false,
+            random_levels: false,
+            random_seed: 0,
+            stage_width_px: 4096.0,
+            stage,
+            tile_info,
+        };
+
+        for hit_x in [10usize, 11, 12] {
+            assert_eq!(
+                find_3x2_block_left(&level, hit_x, 15, |ti, id| ti.breakable[id] != 0),
+                Some(10),
+                "hitting col {} should resolve left column 10",
+                hit_x
+            );
+        }
+
+        // Put a solid tile directly beneath center col (11, 16) -> bumping (11, 15) must be rejected
+        level.stage.array[11][16] = 587;
+        assert_eq!(
+            find_3x2_block_left(&level, 11, 15, |ti, id| ti.breakable[id] != 0),
+            None
+        );
+    }
+
+    #[test]
+    fn punk_mode_gates_drop_stone_helmet_coin_and_breakable_blocks() {
+        let paths = crate::paths::AssetPaths::resolve();
+        let tile_info = crate::tile_properties::load_tile_properties(
+            paths.tilesheet_info().to_str().unwrap(),
+        )
+        .unwrap();
+
+        // Find a real drop_stone bottom-row triple in Tilesheetinfo.tsi
+        let drop_top = (1..2270i32)
+            .find(|&id| {
+                let b = (id + TILES_PER_ROW) as usize;
+                tile_info.drop_stone[b] != 0
+                    && tile_info.drop_stone[b + 1] != 0
+                    && tile_info.drop_stone[b + 2] != 0
+            })
+            .expect("expected 3-wide drop_stone in Tilesheetinfo.tsi");
+
+        // Find a real coin_block_helmet bottom-row triple in Tilesheetinfo.tsi
+        let helmet_top = (1..2270i32)
+            .find(|&id| {
+                let b = (id + TILES_PER_ROW) as usize;
+                tile_info.coin_block_helmet[b] != 0
+                    && tile_info.coin_block_helmet[b + 1] != 0
+                    && tile_info.coin_block_helmet[b + 2] != 0
+                    && tile_info.coin_block[b] == 0
+            })
+            .expect("expected 3-wide coin_block_helmet in Tilesheetinfo.tsi");
+
+        let mut world = World::new();
+        world.init_resource::<TileGrid>();
+        world.init_resource::<Events<SfxEvent>>();
+        world.init_resource::<Events<SpawnPowerUpEvent>>();
+        world.init_resource::<Events<SpawnCoinPopEvent>>();
+        world.init_resource::<Events<SpawnDropStoneEvent>>();
+        world.insert_resource(HudState::default());
+        world.insert_resource(GameAssets {
+            tiles: Handle::default(),
+            player: Handle::default(),
+            enemies: Handle::default(),
+            powerups: Handle::default(),
+            interface: Handle::default(),
+            jump_sfx: Handle::default(),
+            stomp_sfx: Handle::default(),
+            died_sfx: Handle::default(),
+            ding_sfx: Handle::default(),
+            crack_sfx: Handle::default(),
+            morph_sfx: Handle::default(),
+            shoot_sfx: Handle::default(),
+            portal_sfx: Handle::default(),
+            click_sfx: Handle::default(),
+            disk_sfx: Handle::default(),
+        });
+
+        let mut stage = crate::level::ImportStage::new();
+        // Breakable 3x2 at (10, 14..=15)
+        crate::random_gen::stamp_element(&mut stage, 501, 10, 14);
+        // Drop stone 3x2 at (20, 14..=15)
+        for dx in 0..3 {
+            stage.array[20 + dx][14] = drop_top + dx as i32;
+            stage.array[20 + dx][15] = drop_top + TILES_PER_ROW + dx as i32;
+        }
+        // Helmet coin block 3x2 at (30, 14..=15)
+        for dx in 0..3 {
+            stage.array[30 + dx][14] = helmet_top + dx as i32;
+            stage.array[30 + dx][15] = helmet_top + TILES_PER_ROW + dx as i32;
+        }
+
+        world.insert_resource(LevelData {
+            stage_packs: Vec::new(),
+            pack_index: 0,
+            stage_file: std::path::PathBuf::new(),
+            stage_number: 1,
+            checkpoint: 0,
+            sub_stage_entry_stage: None,
+            sub_stage_counter: 0,
+            is_warping: false,
+            random_levels: false,
+            random_seed: 0,
+            stage_width_px: 4096.0,
+            stage,
+            tile_info,
+        });
+
+        #[derive(Resource)]
+        struct TestBump(usize, usize);
+
+        #[allow(clippy::too_many_arguments)]
+        fn run_bump(
+            mut commands: Commands,
+            bump: Res<TestBump>,
+            mut tile_grid: ResMut<TileGrid>,
+            mut level: ResMut<LevelData>,
+            mut tile_q: Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
+            assets: Res<GameAssets>,
+            mut hud: ResMut<HudState>,
+            mut sfx: EventWriter<SfxEvent>,
+            mut powerup_ev: EventWriter<SpawnPowerUpEvent>,
+            mut coin_pop_ev: EventWriter<SpawnCoinPopEvent>,
+            mut dropstone_ev: EventWriter<SpawnDropStoneEvent>,
+        ) {
+            let mut pstate = PlayerState::default();
+            let mut vel = Velocity::default();
+            handle_head_bump_special(
+                &mut commands,
+                &mut tile_grid,
+                &mut level,
+                &mut tile_q,
+                &assets,
+                &mut hud,
+                &mut pstate,
+                &mut vel,
+                &mut sfx,
+                &mut powerup_ev,
+                &mut coin_pop_ev,
+                &mut dropstone_ev,
+                bump.0,
+                bump.1,
+            );
+        }
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(run_bump);
+
+        // Normal Giana (power_up == 0): none of the 3 Punk-only blocks should trigger
+        for tx in [11usize, 21, 31] {
+            world.insert_resource(TestBump(tx, 15));
+            schedule.run(&mut world);
+        }
+        assert_eq!(world.resource::<LevelData>().stage.array[10][14], 501);
+        assert_eq!(world.resource::<LevelData>().stage.array[20][14], drop_top);
+        assert_eq!(world.resource::<HudState>().coins, 0);
+        assert!(world.resource::<Events<SpawnDropStoneEvent>>().is_empty());
+
+        // Punk Giana (power_up == 1): all 3 blocks should trigger properly
+        world.resource_mut::<HudState>().power_up = 1;
+        for tx in [11usize, 21, 31] {
+            world.insert_resource(TestBump(tx, 15));
+            schedule.run(&mut world);
+        }
+        // Breakable stepped +3 into crack animation (501 -> 504)
+        assert_eq!(world.resource::<LevelData>().stage.array[10][14], 504);
+        // Drop stone cleared & event emitted
+        assert_eq!(world.resource::<LevelData>().stage.array[20][14], 0);
+        assert_eq!(world.resource::<Events<SpawnDropStoneEvent>>().len(), 1);
+        // Helmet coin block awarded a coin
+        assert_eq!(world.resource::<HudState>().coins, 1);
     }
 }

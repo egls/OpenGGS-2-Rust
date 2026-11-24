@@ -210,6 +210,7 @@ pub fn animated_tile_source_rect(
 }
 
 /// Mutates tile `(tx, ty)` in both `LevelData.stage.array` and the live ECS `Sprite`/`TileGrid`.
+#[allow(clippy::too_many_arguments)]
 pub fn set_tile<F: bevy::ecs::query::QueryFilter>(
     commands:  &mut Commands,
     tile_grid: &mut TileGrid,

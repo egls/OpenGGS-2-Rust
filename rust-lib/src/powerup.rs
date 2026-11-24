@@ -420,7 +420,7 @@ fn tick_bullet_explosions(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn move_bullets(
     mut commands: Commands,
     time:         Res<Time<Fixed>>,

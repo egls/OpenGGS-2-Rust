@@ -266,6 +266,7 @@ pub fn step_spider_patrol(counter: u32) -> (f32, i32, u32) {
     (dx, dir, (c + 1) % TOTAL)
 }
 
+#[allow(clippy::type_complexity)]
 fn enemy_ai(
     mut commands: Commands,
     cam_q: Query<&Transform, (With<PersistentCamera>, Without<Enemy>)>,

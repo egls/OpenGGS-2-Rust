@@ -94,7 +94,7 @@ pub fn resolve_base_dir() -> PathBuf {
 
 /// Formats a `.lvl` file stem into a clean display label (e.g. `my_pack` -> `My Pack`).
 pub fn format_pack_name(stem: &str) -> String {
-    stem.split(|c: char| c == '_' || c == '-')
+    stem.split(['_', '-'])
         .filter(|part| !part.is_empty())
         .map(|part| {
             let mut chars = part.chars();

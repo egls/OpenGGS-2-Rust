@@ -155,6 +155,7 @@ fn spawn_hud(mut commands: Commands, hud: Res<HudState>, assets: Res<GameAssets>
         });
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn update_hud(
     hud:         Res<HudState>,
     clock:       Res<crate::tilemap::TileAnimClock>,

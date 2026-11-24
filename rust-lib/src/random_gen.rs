@@ -81,10 +81,10 @@ fn extract_stage_modules(stage: &ImportStage, dest: &mut Vec<StageModule>) {
         let mut tiles = [[0i32; MODULE_HEIGHT]; MODULE_WIDTH];
         let mut has_any_tile = false;
 
-        for lx in 0..MODULE_WIDTH {
-            for y in 0..MODULE_HEIGHT {
+        for (lx, col) in tiles.iter_mut().enumerate() {
+            for (y, cell) in col.iter_mut().enumerate() {
                 let id = stage.array[x_start + lx][y];
-                tiles[lx][y] = id;
+                *cell = id;
                 if id != 0 {
                     has_any_tile = true;
                 }
