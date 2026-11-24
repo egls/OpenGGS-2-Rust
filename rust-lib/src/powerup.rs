@@ -5,7 +5,7 @@ use crate::audio::{SfxEvent, SfxKind};
 use crate::enemy::{Enemy, EnemyBehavior, EnemyCollider, EnemyFrames};
 use crate::hud::HudState;
 use crate::player::{aabb, is_solid, Direction, Player, PlayerState, PLAYER_H, PLAYER_W};
-use crate::states::GameState;
+use crate::states::{not_paused, GameState};
 use crate::tilemap::GameEntity;
 
 pub type Frame = (i32, i32, u32, u32);
@@ -90,7 +90,7 @@ impl Plugin for PowerUpPlugin {
                    move_bullets,
                )
                    .chain()
-                   .run_if(in_state(GameState::InGame)),
+                   .run_if(in_state(GameState::InGame).and(not_paused)),
            );
     }
 }

@@ -4,8 +4,11 @@ use crate::assets::{GameAssets, LevelData, MAX_CLASSIC_STAGE};
 use crate::audio::{SfxEvent, SfxKind};
 use crate::hud::HudState;
 use crate::powerup::{FireBulletEvent, SpawnCoinPopEvent, SpawnPowerUpEvent};
-use crate::states::GameState;
-use crate::tilemap::{set_tile, GameEntity, Tile, TileGrid, STAGE_COLS, STAGE_ROWS, TILES_PER_ROW};
+use crate::states::{not_paused, GameState};
+use crate::tilemap::{
+    set_tile, trigger_crumble_tile, GameEntity, MovingPlatform, Tile, TileGrid, STAGE_COLS,
+    STAGE_ROWS, TILES_PER_ROW,
+};
 
 // ── Components ────────────────────────────────────────────────────────────────
 
@@ -129,7 +132,7 @@ impl Plugin for PlayerPlugin {
                    tick_dead_player,
                )
                    .chain()
-                   .run_if(in_state(GameState::InGame)),
+                   .run_if(in_state(GameState::InGame).and(not_paused)),
            )
            .add_systems(
                Update,
@@ -139,7 +142,7 @@ impl Plugin for PlayerPlugin {
                    update_animation,
                    update_player_sprite,
                )
-                   .run_if(in_state(GameState::InGame)),
+                   .run_if(in_state(GameState::InGame).and(not_paused)),
            );
     }
 }
@@ -351,17 +354,20 @@ fn apply_gravity(mut q: Query<(&mut Velocity, &PlayerState), With<Player>>) {
     if vel.vy < -TERMINAL_VEL { vel.vy = -TERMINAL_VEL; }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_movement(
     mut commands:     Commands,
     mut q:            Query<(&mut Transform, &mut Velocity, &mut OnGround, &mut PlayerState), With<Player>>,
+    plat_q:           Query<(&Transform, &MovingPlatform), Without<Player>>,
     mut level:        ResMut<LevelData>,
     mut tile_grid:    ResMut<TileGrid>,
-    mut tile_q:       Query<(&mut Tile, &mut Sprite), Without<Player>>,
+    mut tile_q:       Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
     assets:           Res<GameAssets>,
     mut hud:          ResMut<HudState>,
     mut sfx:          EventWriter<SfxEvent>,
     mut powerup_ev:   EventWriter<SpawnPowerUpEvent>,
     mut coin_pop_ev:  EventWriter<SpawnCoinPopEvent>,
+    mut next_state:   ResMut<NextState<GameState>>,
 ) {
     let Ok((mut tf, mut vel, mut on_ground, mut pstate)) = q.get_single_mut() else { return };
 
@@ -386,8 +392,51 @@ fn apply_movement(
     }
     resolve_x(&mut tf, &mut vel, &level);
 
+    let prev_bottom_y = tf.translation.y - PLAYER_H;
     tf.translation.y += vel.vy;
     let head_bump_tile = resolve_y(&mut tf, &mut vel, &mut on_ground, &level);
+
+    // Moving platform landing & riding (one-way top collision)
+    if vel.vy <= 0.0 {
+        let px = tf.translation.x;
+        let new_bottom_y = tf.translation.y - PLAYER_H;
+        for (ptf, plat) in &plat_q {
+            let plat_left = ptf.translation.x;
+            let plat_right = plat_left + plat.width;
+            let plat_top = ptf.translation.y;
+            let overlap_x = px + PLAYER_W > plat_left && px < plat_right;
+            let was_above = prev_bottom_y >= plat_top - plat.delta_y - 6.0;
+            let landed = new_bottom_y <= plat_top + 2.0 && new_bottom_y >= plat_top - plat.height - 6.0;
+            if overlap_x && was_above && landed {
+                tf.translation.y = plat_top + PLAYER_H;
+                vel.vy = 0.0;
+                on_ground.0 = true;
+                break;
+            }
+        }
+    }
+
+    // Trigger crumbling ground under player's feet (tiles 566 / 567)
+    if on_ground.0 {
+        let px = tf.translation.x;
+        let feet_py = -tf.translation.y + PLAYER_H + 1.0;
+        let ty = (feet_py / 16.0).floor() as i32;
+        if ty >= 0 && ty < STAGE_ROWS as i32 {
+            for tx in tile_range(px, PLAYER_W) {
+                if tx >= 0 && tx < STAGE_COLS as i32 {
+                    trigger_crumble_tile(
+                        &mut commands,
+                        &mut tile_grid,
+                        &mut level,
+                        &mut tile_q,
+                        &assets,
+                        tx as usize,
+                        ty as usize,
+                    );
+                }
+            }
+        }
+    }
 
     if let Some((btx, bty)) = head_bump_tile {
         handle_head_bump_special(
@@ -400,6 +449,7 @@ fn apply_movement(
             &mut sfx,
             &mut powerup_ev,
             &mut coin_pop_ev,
+            &mut next_state,
             btx,
             bty,
         );
@@ -518,7 +568,7 @@ fn replace_3x2_with_spent_block(
     commands:  &mut Commands,
     tile_grid: &mut TileGrid,
     level:     &mut LevelData,
-    tile_q:    &mut Query<(&mut Tile, &mut Sprite), Without<Player>>,
+    tile_q:    &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
     assets:    &GameAssets,
     left_x:    usize,
     bottom_y:  usize,
@@ -538,15 +588,33 @@ fn handle_head_bump_special(
     commands:    &mut Commands,
     tile_grid:   &mut TileGrid,
     level:       &mut LevelData,
-    tile_q:      &mut Query<(&mut Tile, &mut Sprite), Without<Player>>,
+    tile_q:      &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
     assets:      &GameAssets,
     hud:         &mut HudState,
     sfx:         &mut EventWriter<SfxEvent>,
     powerup_ev:  &mut EventWriter<SpawnPowerUpEvent>,
     coin_pop_ev: &mut EventWriter<SpawnCoinPopEvent>,
+    next_state:  &mut ResMut<NextState<GameState>>,
     tx:          usize,
     ty:          usize,
 ) {
+    // 0. Hidden warp stone block -> warps to stage.warp_to_stage (matches C++ PC_Collision_WarpStone)
+    if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.warp_stone[id] != 0) {
+        replace_3x2_with_spent_block(commands, tile_grid, level, tile_q, assets, left_x, ty);
+        sfx.send(SfxEvent(SfxKind::Portal));
+        let warp_target = level.stage.warp_to_stage;
+        let next_stage = if (1..=MAX_CLASSIC_STAGE as i32).contains(&warp_target) {
+            warp_target as usize
+        } else {
+            (hud.stage + 1).min(MAX_CLASSIC_STAGE)
+        };
+        hud.stage = next_stage;
+        level.checkpoint = 0;
+        level.sub_stage_entry_stage = None;
+        next_state.set(GameState::StageTransition);
+        return;
+    }
+
     // 1. Power-up block
     if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.power_up_block[id] != 0) {
         replace_3x2_with_spent_block(commands, tile_grid, level, tile_q, assets, left_x, ty);
@@ -585,14 +653,15 @@ fn handle_head_bump_special(
     }
 }
 
-// ── Non-solid tile collisions: Coins, Lethal/Fire, Exit, Pitfall ──────────────
+// ── Non-solid tile collisions: Coins, Lethal/Fire, Substage, Exit, Pitfall ───
 
+#[allow(clippy::too_many_arguments)]
 fn check_non_solid_tiles(
     mut commands:   Commands,
     player_q:       Query<(&Transform, &PlayerState), With<Player>>,
     mut level:      ResMut<LevelData>,
     mut tile_grid:  ResMut<TileGrid>,
-    mut tile_q:     Query<(&mut Tile, &mut Sprite), Without<Player>>,
+    mut tile_q:     Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
     assets:         Res<GameAssets>,
     mut hud:        ResMut<HudState>,
     mut sfx:        EventWriter<SfxEvent>,
@@ -614,6 +683,7 @@ fn check_non_solid_tiles(
     let py = -tf.translation.y;
     let mut hit_lethal = false;
     let mut hit_exit = false;
+    let mut hit_substage = false;
     let mut coins_to_collect: Vec<(usize, usize)> = Vec::new();
 
     for tx in tile_range(px, PLAYER_W) {
@@ -636,6 +706,9 @@ fn check_non_solid_tiles(
                     hit_lethal = true;
                 }
             }
+            if level.tile_info.sub_stage_entrance[uid] != 0 {
+                hit_substage = true;
+            }
             if level.tile_info.exit[uid] != 0 {
                 hit_exit = true;
             }
@@ -651,10 +724,28 @@ fn check_non_solid_tiles(
         sfx.send(SfxEvent(SfxKind::Ding));
     }
 
+    // Enter bonus substage (stages 34..=37, matching C++ LOOP_Gameloop.cpp:167-176)
+    if hit_substage && hud.stage <= MAX_CLASSIC_STAGE {
+        sfx.send(SfxEvent(SfxKind::Portal));
+        level.sub_stage_entry_stage = Some(hud.stage);
+        let bonus_stage = 34 + level.sub_stage_counter;
+        level.sub_stage_counter = (level.sub_stage_counter + 1) % 4;
+        hud.stage = bonus_stage;
+        level.checkpoint = 0;
+        next_state.set(GameState::StageTransition);
+        return;
+    }
+
     if hit_exit {
         sfx.send(SfxEvent(SfxKind::Portal));
         hud.score += 500;
-        if hud.stage >= MAX_CLASSIC_STAGE {
+        if hud.stage > MAX_CLASSIC_STAGE {
+            // Exiting a bonus substage returns to entry stage at checkpoint 3 (matches C++ LOOP_Gameloop.cpp:89-92)
+            let return_stage = level.sub_stage_entry_stage.take().unwrap_or(1);
+            hud.stage = return_stage;
+            level.checkpoint = 3;
+            next_state.set(GameState::StageTransition);
+        } else if hud.stage >= MAX_CLASSIC_STAGE {
             hud.victory = true;
             next_state.set(GameState::GameOver);
         } else {
@@ -675,7 +766,7 @@ fn collect_coin_cluster(
     commands:  &mut Commands,
     tile_grid: &mut TileGrid,
     level:     &mut LevelData,
-    tile_q:    &mut Query<(&mut Tile, &mut Sprite), Without<Player>>,
+    tile_q:    &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
     assets:    &GameAssets,
     cx:        usize,
     cy:        usize,

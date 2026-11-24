@@ -6,7 +6,7 @@ use crate::hud::HudState;
 use crate::player::{
     is_solid, KillPlayerEvent, Player, PlayerState, Velocity as PlayerVelocity, PLAYER_H, PLAYER_W,
 };
-use crate::states::GameState;
+use crate::states::{not_paused, GameState};
 use crate::tilemap::GameEntity;
 
 // ── Components ────────────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ impl Plugin for EnemyPlugin {
                FixedUpdate,
                (enemy_ai, player_enemy_collision, handle_stomp)
                    .chain()
-                   .run_if(in_state(GameState::InGame)),
+                   .run_if(in_state(GameState::InGame).and(not_paused)),
            );
     }
 }

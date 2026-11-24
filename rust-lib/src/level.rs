@@ -97,13 +97,25 @@ mod tests {
     }
 
     #[test]
-    fn all_33_classic_stages_load() {
+    fn all_33_classic_stages_and_substages_load() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
-        for stage_num in 1..=33 {
+        for stage_num in 1..=37 {
             let stage = load_stage(path.to_str().unwrap(), stage_num)
                 .unwrap_or_else(|e| panic!("classic.lvl stage {} failed to load: {}", stage_num, e));
             let has_tiles = stage.array.iter().flat_map(|c| c.iter()).any(|&id| id != 0);
             assert!(has_tiles, "classic.lvl stage {} has no tiles", stage_num);
+        }
+    }
+
+    #[test]
+    fn all_stage_packs_load_stage_1() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages");
+        for pack in ["classic.lvl", "new.lvl", "modules.lvl"] {
+            let path = dir.join(pack);
+            let stage = load_stage(path.to_str().unwrap(), 1)
+                .unwrap_or_else(|e| panic!("{} stage 1 failed: {}", pack, e));
+            let has_tiles = stage.array.iter().flat_map(|c| c.iter()).any(|&id| id != 0);
+            assert!(has_tiles, "{} stage 1 has no tiles", pack);
         }
     }
 }

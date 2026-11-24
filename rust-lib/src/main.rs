@@ -7,6 +7,7 @@ mod game_over;
 mod hud;
 mod level;
 mod menu;
+mod options;
 mod player;
 mod powerup;
 mod states;
@@ -41,6 +42,7 @@ fn main() {
         .add_plugins((
             AssetsPlugin,
             MenuPlugin,
+            options::OptionsPlugin,
             TileMapPlugin,
             PlayerPlugin,
             EnemyPlugin,

@@ -1,18 +1,22 @@
 use bevy::prelude::*;
 
-use crate::assets::{GameAssets, LevelData, PersistentCamera, MAX_CLASSIC_STAGE};
+use crate::assets::{GameAssets, LevelData, PersistentCamera, MAX_CLASSIC_STAGE, MAX_SUBSTAGE_INDEX};
+use crate::audio::{SfxEvent, SfxKind};
 use crate::hud::HudState;
-use crate::states::GameState;
+use crate::states::{not_paused, GamePaused, GameState};
+use crate::tile_properties::TileSheetInfo;
 
 pub const TILE_W: f32 = 16.0;
 pub const TILE_H: f32 = 16.0;
 pub const TILES_PER_ROW: i32 = 40;
+pub const TILESHEET_W: f32 = 40.0 * 16.0;
+pub const TILESHEET_H: f32 = 58.0 * 16.0;
 pub const STAGE_COLS: usize = 256;
 pub const STAGE_ROWS: usize = 30;
 
 // ── Marker components ─────────────────────────────────────────────────────────
 
-/// Marks all entities that belong to the in-game world (tiles, player, enemies, items).
+/// Marks all entities that belong to the in-game world (tiles, player, enemies, items, platforms).
 /// Used for bulk despawn on state exit.
 #[derive(Component)]
 pub struct GameEntity;
@@ -21,6 +25,29 @@ pub struct GameEntity;
 #[derive(Component)]
 pub struct Tile {
     pub tile_id: i32,
+}
+
+/// Tag for tiles whose sprite rect animates on `TileAnimClock`.
+#[derive(Component)]
+pub struct AnimatedTile;
+
+/// Tracks a crumbling ground tile stepping through `568->570->572->0` or `569->571->573->0`.
+#[derive(Component)]
+pub struct CrumblingTile {
+    pub tx: usize,
+    pub ty: usize,
+    pub timer: f32,
+}
+
+/// Vertical moving platform (matches C++ `Platform` in `GRAPHICS_Sprites_Move.cpp`).
+#[derive(Component)]
+pub struct MovingPlatform {
+    pub start_y:   f32,
+    pub end_y:     f32,
+    pub direction: i32, // 1 = moving toward end_y, 0 = moving toward start_y
+    pub width:     f32,
+    pub height:    f32,
+    pub delta_y:   f32,
 }
 
 // ── Resources ─────────────────────────────────────────────────────────────────
@@ -39,11 +66,40 @@ impl Default for TileGrid {
     }
 }
 
+/// Shared tile animation counters matching C++ `ME.Frame_3`, `ME.Frame_4`, `ME.Frame_6`.
+#[derive(Resource)]
+pub struct TileAnimClock {
+    pub timer:   Timer,
+    pub frame_3: i32,
+    pub frame_4: i32,
+    pub frame_6: i32,
+}
+
+impl Default for TileAnimClock {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(0.13, TimerMode::Repeating),
+            frame_3: 0,
+            frame_4: 0,
+            frame_6: 0,
+        }
+    }
+}
+
 #[derive(Resource)]
 struct StageTransitionTimer(Timer);
 
 #[derive(Component)]
 struct TransitionBannerRoot;
+
+#[derive(Component)]
+struct PauseMenuRoot;
+
+#[derive(Component)]
+struct PauseOptionText(usize);
+
+#[derive(Resource, Default)]
+struct PauseSelection(usize);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -55,15 +111,82 @@ pub fn tile_source_rect(tile_id: i32) -> Rect {
     Rect::new(src_x, src_y, src_x + TILE_W, src_y + TILE_H)
 }
 
+pub fn is_animated_tile(tile_id: i32, tile_info: &TileSheetInfo) -> bool {
+    if tile_id <= 0 || (tile_id as usize) >= 2320 {
+        return false;
+    }
+    let id = tile_id as usize;
+    tile_info.coin[id] != 0
+        || tile_info.coin_block[id] != 0
+        || tile_info.power_up_block[id] != 0
+        || (10..=13).contains(&tile_id)
+        || (6..=9).contains(&tile_id)
+        || (46..=49).contains(&tile_id)
+        || (250..=252).contains(&tile_id)
+}
+
+/// Computes the source rect for a tile including C++ animation and stage colour-theme offsets
+/// (matches `src/GRAPHICS_Tiles_Draw.cpp:44-96`).
+pub fn animated_tile_source_rect(
+    tile_id:   i32,
+    tile_type: i32,
+    tile_info: &TileSheetInfo,
+    frame_3:   i32,
+    frame_4:   i32,
+    frame_6:   i32,
+) -> Rect {
+    let mut sx = (tile_id % TILES_PER_ROW) * 16;
+    let mut sy = (tile_id / TILES_PER_ROW) * 16;
+
+    if tile_id > 0 && (tile_id as usize) < 2320 {
+        let uid = tile_id as usize;
+
+        if tile_info.coin[uid] != 0 {
+            sx += (2 * frame_6 - 3) * 16;
+            sy += 52 * 16;
+        }
+        if tile_info.coin_block[uid] != 0 {
+            sx += (3 * frame_6) * 16;
+            sy -= 2 * 16;
+        }
+        if tile_info.power_up_block[uid] != 0 {
+            sx += (3 * frame_6) * 16;
+        }
+        // Little flames
+        if (10..=13).contains(&tile_id) {
+            sx += (4 * frame_4 + 2) * 16;
+            sy += 57 * 16;
+        }
+        // Big flames
+        if (6..=9).contains(&tile_id) || (46..=49).contains(&tile_id) {
+            sx += (4 * frame_3 - 6) * 16;
+            sy += 55 * 16;
+        }
+        // Lava
+        if (250..=252).contains(&tile_id) {
+            sx += (3 * frame_3 - 10) * 16;
+            sy += 48 * 16;
+        }
+        // Colour-changing stage theme tiles (underground, castle, ice, etc.)
+        if tile_info.colour_changing[uid] != 0 && tile_type > 0 {
+            sy += tile_type * 10 * 16;
+        }
+    }
+
+    let x = (sx as f32).clamp(0.0, TILESHEET_W - TILE_W);
+    let y = (sy as f32).clamp(0.0, TILESHEET_H - TILE_H);
+    Rect::new(x, y, x + TILE_W, y + TILE_H)
+}
+
 /// Mutates tile `(tx, ty)` in both `LevelData.stage.array` and the live ECS `Sprite`/`TileGrid`.
 pub fn set_tile<F: bevy::ecs::query::QueryFilter>(
-    commands: &mut Commands,
+    commands:  &mut Commands,
     tile_grid: &mut TileGrid,
-    level: &mut LevelData,
-    tile_q: &mut Query<(&mut Tile, &mut Sprite), F>,
-    assets: &GameAssets,
-    tx: usize,
-    ty: usize,
+    level:     &mut LevelData,
+    tile_q:    &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), F>,
+    assets:    &GameAssets,
+    tx:        usize,
+    ty:        usize,
     new_tile_id: i32,
 ) {
     if tx >= STAGE_COLS || ty >= STAGE_ROWS {
@@ -78,33 +201,69 @@ pub fn set_tile<F: bevy::ecs::query::QueryFilter>(
         return;
     }
 
+    let rect = animated_tile_source_rect(
+        new_tile_id,
+        level.stage.tile_type,
+        &level.tile_info,
+        0,
+        0,
+        0,
+    );
+
     if let Some(entity) = tile_grid.entities[tx][ty] {
-        if let Ok((mut tile, mut sprite)) = tile_q.get_mut(entity) {
+        if let Ok((mut tile, mut sprite, mut vis)) = tile_q.get_mut(entity) {
             tile.tile_id = new_tile_id;
-            sprite.rect = Some(tile_source_rect(new_tile_id));
+            sprite.rect = Some(rect);
+            *vis = Visibility::Inherited;
+            if !is_animated_tile(new_tile_id, &level.tile_info) {
+                commands.entity(entity).remove::<AnimatedTile>();
+            }
             return;
         }
     }
 
     let px = tx as f32 * TILE_W;
     let py = -(ty as f32 * TILE_H);
-    let entity = commands
-        .spawn((
-            GameEntity,
-            Tile {
-                tile_id: new_tile_id,
-            },
-            Sprite {
-                image: assets.tiles.clone(),
-                rect: Some(tile_source_rect(new_tile_id)),
-                custom_size: Some(Vec2::new(TILE_W, TILE_H)),
-                anchor: bevy::sprite::Anchor::TopLeft,
-                ..default()
-            },
-            Transform::from_xyz(px, py, 0.0),
-        ))
-        .id();
-    tile_grid.entities[tx][ty] = Some(entity);
+    let mut ec = commands.spawn((
+        GameEntity,
+        Tile { tile_id: new_tile_id },
+        Sprite {
+            image: assets.tiles.clone(),
+            rect: Some(rect),
+            custom_size: Some(Vec2::new(TILE_W, TILE_H)),
+            anchor: bevy::sprite::Anchor::TopLeft,
+            ..default()
+        },
+        Transform::from_xyz(px, py, 0.0),
+    ));
+    if is_animated_tile(new_tile_id, &level.tile_info) {
+        ec.insert(AnimatedTile);
+    }
+    tile_grid.entities[tx][ty] = Some(ec.id());
+}
+
+/// Triggers a crumbling ground tile (`566` or `567`) when the player steps on it.
+pub fn trigger_crumble_tile<F: bevy::ecs::query::QueryFilter>(
+    commands:  &mut Commands,
+    tile_grid: &mut TileGrid,
+    level:     &mut LevelData,
+    tile_q:    &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), F>,
+    assets:    &GameAssets,
+    tx:        usize,
+    ty:        usize,
+) {
+    if tx >= STAGE_COLS || ty >= STAGE_ROWS {
+        return;
+    }
+    let next_id = match level.stage.array[tx][ty] {
+        566 => 568,
+        567 => 569,
+        _   => return,
+    };
+    set_tile(commands, tile_grid, level, tile_q, assets, tx, ty, next_id);
+    if let Some(ent) = tile_grid.entities[tx][ty] {
+        commands.entity(ent).insert(CrumblingTile { tx, ty, timer: 0.16 });
+    }
 }
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
@@ -114,19 +273,40 @@ pub struct TileMapPlugin;
 impl Plugin for TileMapPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TileGrid>()
+           .init_resource::<TileAnimClock>()
+           .init_resource::<GamePaused>()
+           .init_resource::<PauseSelection>()
            .add_systems(OnEnter(GameState::StageTransition), enter_stage_transition)
            .add_systems(
                Update,
                tick_stage_transition.run_if(in_state(GameState::StageTransition)),
            )
            .add_systems(OnExit(GameState::StageTransition), exit_stage_transition)
-           .add_systems(OnEnter(GameState::InGame), (spawn_tiles, reset_camera))
+           .add_systems(
+               OnEnter(GameState::InGame),
+               (clear_pause_state, spawn_tiles, spawn_platform, reset_camera),
+           )
+           .add_systems(
+               FixedUpdate,
+               (move_platforms, tick_crumbling_tiles)
+                   .run_if(in_state(GameState::InGame).and(not_paused)),
+           )
            .add_systems(
                Update,
-               (camera_follow, ingame_shortcuts).run_if(in_state(GameState::InGame)),
+               (
+                   toggle_pause,
+                   pause_menu_input,
+                   (animate_tiles, camera_follow, ingame_shortcuts).run_if(not_paused),
+               )
+                   .run_if(in_state(GameState::InGame)),
            )
-           .add_systems(OnExit(GameState::InGame), despawn_game_entities);
+           .add_systems(OnExit(GameState::InGame), (despawn_pause_overlay, despawn_game_entities));
     }
+}
+
+fn clear_pause_state(mut paused: ResMut<GamePaused>, mut sel: ResMut<PauseSelection>) {
+    paused.0 = false;
+    sel.0 = 0;
 }
 
 // ── Stage transition systems ──────────────────────────────────────────────────
@@ -137,7 +317,7 @@ fn enter_stage_transition(
     hud:          Res<HudState>,
     mut next:     ResMut<NextState<GameState>>,
 ) {
-    let target_stage = hud.stage.clamp(1, MAX_CLASSIC_STAGE);
+    let target_stage = hud.stage.clamp(1, MAX_SUBSTAGE_INDEX);
     let checkpoint = level.checkpoint;
     if let Err(err) = level.load_stage_number(target_stage, checkpoint) {
         eprintln!("Failed to load stage {}: {}", target_stage, err);
@@ -148,7 +328,13 @@ fn enter_stage_transition(
     commands.insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.12)));
     commands.insert_resource(StageTransitionTimer(Timer::from_seconds(0.75, TimerMode::Once)));
 
+    let headline = if target_stage > MAX_CLASSIC_STAGE {
+        format!("BONUS STAGE {}", target_stage - MAX_CLASSIC_STAGE)
+    } else {
+        format!("STAGE {}", target_stage)
+    };
     let stage_name = stage_display_name(&level.stage.name, target_stage);
+
     commands
         .spawn((
             TransitionBannerRoot,
@@ -165,17 +351,15 @@ fn enter_stage_transition(
         ))
         .with_children(|parent| {
             parent.spawn((
-                Text::new(format!("STAGE {}", target_stage)),
+                Text::new(headline),
                 TextFont { font_size: 56.0, ..default() },
                 TextColor(Color::srgb(1.0, 0.85, 0.2)),
             ));
-            if !stage_name.is_empty() {
-                parent.spawn((
-                    Text::new(stage_name),
-                    TextFont { font_size: 24.0, ..default() },
-                    TextColor(Color::srgb(0.85, 0.85, 0.95)),
-                ));
-            }
+            parent.spawn((
+                Text::new(format!("{} — {}", level.pack_name(), stage_name)),
+                TextFont { font_size: 22.0, ..default() },
+                TextColor(Color::srgb(0.85, 0.85, 0.95)),
+            ));
             parent.spawn((
                 Text::new(format!("LIVES: {}", hud.lives)),
                 TextFont { font_size: 22.0, ..default() },
@@ -188,7 +372,7 @@ fn stage_display_name(raw: &[u8; 100], stage_num: usize) -> String {
     let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
     let name = String::from_utf8_lossy(&raw[..end]).trim().to_string();
     if name.eq_ignore_ascii_case("noname") || name.is_empty() {
-        format!("Get ready for Stage {}", stage_num)
+        format!("Stage {}", stage_num)
     } else {
         name
     }
@@ -212,7 +396,7 @@ fn exit_stage_transition(mut commands: Commands, q: Query<Entity, With<Transitio
     }
 }
 
-// ── In-game tilemap & camera systems ──────────────────────────────────────────
+// ── In-game tilemap, platforms, animations & crumbling ────────────────────────
 
 fn reset_camera(
     level: Res<LevelData>,
@@ -239,8 +423,8 @@ fn spawn_tiles(
     *tile_grid = TileGrid::default();
 
     let bg_color = match level.stage.background_colour {
-        0 => Color::srgb(0.4, 0.6, 1.0), // Blue sky
-        _ => Color::BLACK,
+        0 => Color::srgb(0.4, 0.6, 1.0), // Blue sky (outdoors)
+        _ => Color::BLACK,               // Indoors / underground
     };
     commands.insert_resource(ClearColor(bg_color));
 
@@ -249,25 +433,158 @@ fn spawn_tiles(
             let tile_id = level.stage.array[x][y];
             if tile_id == 0 { continue; }
 
-            // Bevy Y-up: flip Y so row 0 is at the top of the screen
             let px = x as f32 * TILE_W;
             let py = -(y as f32 * TILE_H);
+            let rect = animated_tile_source_rect(
+                tile_id,
+                level.stage.tile_type,
+                &level.tile_info,
+                0,
+                0,
+                0,
+            );
 
-            let entity = commands
-                .spawn((
-                    GameEntity,
-                    Tile { tile_id },
-                    Sprite {
-                        image: assets.tiles.clone(),
-                        rect: Some(tile_source_rect(tile_id)),
-                        custom_size: Some(Vec2::new(TILE_W, TILE_H)),
-                        anchor: bevy::sprite::Anchor::TopLeft,
-                        ..default()
-                    },
-                    Transform::from_xyz(px, py, 0.0),
-                ))
-                .id();
-            tile_grid.entities[x][y] = Some(entity);
+            // Warp stones are invisible until bumped (matches C++ GRAPHICS_Tiles_Draw.cpp:109)
+            let is_hidden_warp = tile_id > 0
+                && (tile_id as usize) < 2320
+                && level.tile_info.warp_stone[tile_id as usize] != 0;
+
+            let mut ec = commands.spawn((
+                GameEntity,
+                Tile { tile_id },
+                Sprite {
+                    image: assets.tiles.clone(),
+                    rect: Some(rect),
+                    custom_size: Some(Vec2::new(TILE_W, TILE_H)),
+                    anchor: bevy::sprite::Anchor::TopLeft,
+                    ..default()
+                },
+                if is_hidden_warp { Visibility::Hidden } else { Visibility::Inherited },
+                Transform::from_xyz(px, py, 0.0),
+            ));
+
+            if is_animated_tile(tile_id, &level.tile_info) {
+                ec.insert(AnimatedTile);
+            }
+            tile_grid.entities[x][y] = Some(ec.id());
+        }
+    }
+}
+
+fn spawn_platform(
+    mut commands: Commands,
+    level:        Res<LevelData>,
+    assets:       Res<GameAssets>,
+) {
+    if level.stage.platform_in_use == 0 {
+        return;
+    }
+
+    let start_x = level.stage.platform_x as f32 * TILE_W;
+    let start_y = -(level.stage.platform_y as f32 * TILE_H);
+    let path_px = level.stage.platform_path_length.max(1) as f32 * TILE_H;
+    // In C++ End_Y = Start_Y - path_length (higher on screen) => higher Y in Bevy Y-up
+    let end_y = start_y + path_px;
+
+    // Platform sprite rect in Tiles.png from C++ GRAPHICS_Sprites.cpp:87-90
+    const PLAT_W: f32 = 144.0;
+    const PLAT_H: f32 = 16.0;
+
+    commands.spawn((
+        GameEntity,
+        MovingPlatform {
+            start_y,
+            end_y,
+            direction: 1,
+            width: PLAT_W,
+            height: PLAT_H,
+            delta_y: 0.0,
+        },
+        Sprite {
+            image: assets.tiles.clone(),
+            rect: Some(Rect::new(192.0, 240.0, 192.0 + PLAT_W, 240.0 + PLAT_H)),
+            custom_size: Some(Vec2::new(PLAT_W, PLAT_H)),
+            anchor: bevy::sprite::Anchor::TopLeft,
+            ..default()
+        },
+        Transform::from_xyz(start_x, start_y, 0.4),
+    ));
+}
+
+fn move_platforms(mut q: Query<(&mut Transform, &mut MovingPlatform)>) {
+    const SPEED: f32 = 1.25;
+    for (mut tf, mut plat) in &mut q {
+        let old_y = tf.translation.y;
+        let target = if plat.direction == 1 { plat.end_y } else { plat.start_y };
+        let diff = target - tf.translation.y;
+        if diff.abs() <= SPEED {
+            tf.translation.y = target;
+            plat.direction = 1 - plat.direction;
+        } else {
+            tf.translation.y += diff.signum() * SPEED;
+        }
+        plat.delta_y = tf.translation.y - old_y;
+    }
+}
+
+fn animate_tiles(
+    time:      Res<Time>,
+    mut clock: ResMut<TileAnimClock>,
+    level:     Res<LevelData>,
+    mut q:     Query<(&Tile, &mut Sprite), With<AnimatedTile>>,
+) {
+    clock.timer.tick(time.delta());
+    if !clock.timer.just_finished() {
+        return;
+    }
+
+    clock.frame_3 = (clock.frame_3 + 1) % 3;
+    clock.frame_4 = (clock.frame_4 + 1) % 4;
+    clock.frame_6 = (clock.frame_6 + 1) % 6;
+
+    for (tile, mut sprite) in &mut q {
+        sprite.rect = Some(animated_tile_source_rect(
+            tile.tile_id,
+            level.stage.tile_type,
+            &level.tile_info,
+            clock.frame_3,
+            clock.frame_4,
+            clock.frame_6,
+        ));
+    }
+}
+
+fn tick_crumbling_tiles(
+    mut commands:  Commands,
+    time:          Res<Time<Fixed>>,
+    mut level:     ResMut<LevelData>,
+    mut tile_grid: ResMut<TileGrid>,
+    assets:        Res<GameAssets>,
+    mut crumb_q:   Query<(Entity, &mut CrumblingTile)>,
+    mut tile_q:    Query<(&mut Tile, &mut Sprite, &mut Visibility)>,
+) {
+    let dt = time.delta_secs();
+    let mut updates: Vec<(Entity, usize, usize, i32)> = Vec::new();
+
+    for (ent, mut crumb) in &mut crumb_q {
+        crumb.timer -= dt;
+        if crumb.timer <= 0.0 {
+            crumb.timer = 0.16;
+            let cur = level.stage.array[crumb.tx][crumb.ty];
+            let next_id = match cur {
+                568..=571 => cur + 2,
+                572 | 573 => 0,
+                _         => 0,
+            };
+            updates.push((ent, crumb.tx, crumb.ty, next_id));
+        }
+    }
+
+    for (ent, tx, ty, next_id) in updates {
+        set_tile(&mut commands, &mut tile_grid, &mut level, &mut tile_q, &assets, tx, ty, next_id);
+        if next_id == 0 {
+            // Entity already despawned by set_tile; guard in case it wasn't
+            let _ = ent;
         }
     }
 }
@@ -286,26 +603,152 @@ fn camera_follow(
     cam_tf.translation.y += (target_y - cam_tf.translation.y) * 0.12;
 }
 
-/// Convenience shortcuts matching C++ LOOP_Gameloop: ESC -> Menu, F2 -> reload, F3/F4 -> next/prev stage.
+/// Convenience shortcuts matching C++ LOOP_Gameloop: F2 reload, F3/F4 next/prev stage.
 fn ingame_shortcuts(
     keys:      Res<ButtonInput<KeyCode>>,
     mut hud:   ResMut<HudState>,
     mut level: ResMut<LevelData>,
     mut next:  ResMut<NextState<GameState>>,
 ) {
-    if keys.just_pressed(KeyCode::Escape) {
-        next.set(GameState::Menu);
-    } else if keys.just_pressed(KeyCode::F2) {
+    if keys.just_pressed(KeyCode::F2) {
         level.checkpoint = 0;
         next.set(GameState::StageTransition);
     } else if keys.just_pressed(KeyCode::F3) {
         hud.stage = if hud.stage >= MAX_CLASSIC_STAGE { 1 } else { hud.stage + 1 };
         level.checkpoint = 0;
+        level.sub_stage_entry_stage = None;
         next.set(GameState::StageTransition);
     } else if keys.just_pressed(KeyCode::F4) {
         hud.stage = if hud.stage <= 1 { MAX_CLASSIC_STAGE } else { hud.stage - 1 };
         level.checkpoint = 0;
+        level.sub_stage_entry_stage = None;
         next.set(GameState::StageTransition);
+    }
+}
+
+// ── Pause Overlay ─────────────────────────────────────────────────────────────
+
+const PAUSE_OPTIONS: [&str; 3] = ["RESUME", "RESTART STAGE", "MAIN MENU"];
+
+fn toggle_pause(
+    mut commands: Commands,
+    keys:         Res<ButtonInput<KeyCode>>,
+    mut paused:   ResMut<GamePaused>,
+    mut sel:      ResMut<PauseSelection>,
+    mut sfx:      EventWriter<SfxEvent>,
+    overlay_q:    Query<Entity, With<PauseMenuRoot>>,
+) {
+    if keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyP) {
+        paused.0 = !paused.0;
+        sel.0 = 0;
+        sfx.send(SfxEvent(SfxKind::Click));
+        if paused.0 {
+            spawn_pause_overlay(&mut commands);
+        } else {
+            for e in &overlay_q {
+                commands.entity(e).despawn_recursive();
+            }
+        }
+    }
+}
+
+fn spawn_pause_overlay(commands: &mut Commands) {
+    commands
+        .spawn((
+            PauseMenuRoot,
+            Node {
+                width:           Val::Percent(100.0),
+                height:          Val::Percent(100.0),
+                flex_direction:  FlexDirection::Column,
+                align_items:     AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                row_gap:         Val::Px(16.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.08, 0.72)),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("PAUSED"),
+                TextFont { font_size: 56.0, ..default() },
+                TextColor(Color::srgb(1.0, 0.85, 0.2)),
+            ));
+            for (i, label) in PAUSE_OPTIONS.iter().enumerate() {
+                parent.spawn((
+                    PauseOptionText(i),
+                    Text::new(if i == 0 { format!("> {}", label) } else { (*label).to_string() }),
+                    TextFont { font_size: 28.0, ..default() },
+                    TextColor(if i == 0 { Color::srgb(1.0, 0.9, 0.3) } else { Color::WHITE }),
+                ));
+            }
+        });
+}
+
+fn pause_menu_input(
+    mut commands: Commands,
+    keys:         Res<ButtonInput<KeyCode>>,
+    mut paused:   ResMut<GamePaused>,
+    mut sel:      ResMut<PauseSelection>,
+    mut level:    ResMut<LevelData>,
+    mut next:     ResMut<NextState<GameState>>,
+    mut sfx:      EventWriter<SfxEvent>,
+    overlay_q:    Query<Entity, With<PauseMenuRoot>>,
+    mut text_q:   Query<(&PauseOptionText, &mut Text, &mut TextColor)>,
+) {
+    if !paused.0 {
+        return;
+    }
+
+    let mut changed = false;
+    if keys.just_pressed(KeyCode::ArrowDown) {
+        sel.0 = (sel.0 + 1) % PAUSE_OPTIONS.len();
+        changed = true;
+    } else if keys.just_pressed(KeyCode::ArrowUp) {
+        sel.0 = (sel.0 + PAUSE_OPTIONS.len() - 1) % PAUSE_OPTIONS.len();
+        changed = true;
+    }
+
+    if changed {
+        sfx.send(SfxEvent(SfxKind::Click));
+        for (opt, mut text, mut color) in &mut text_q {
+            let label = PAUSE_OPTIONS[opt.0];
+            if opt.0 == sel.0 {
+                **text = format!("> {}", label);
+                color.0 = Color::srgb(1.0, 0.9, 0.3);
+            } else {
+                **text = label.to_string();
+                color.0 = Color::WHITE;
+            }
+        }
+    }
+
+    if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
+        sfx.send(SfxEvent(SfxKind::Click));
+        paused.0 = false;
+        for e in &overlay_q {
+            commands.entity(e).despawn_recursive();
+        }
+        match sel.0 {
+            0 => {} // Resume
+            1 => {
+                level.checkpoint = 0;
+                next.set(GameState::StageTransition);
+            }
+            _ => {
+                next.set(GameState::Menu);
+            }
+        }
+    }
+}
+
+fn despawn_pause_overlay(
+    mut commands: Commands,
+    mut paused:   ResMut<GamePaused>,
+    q:            Query<Entity, With<PauseMenuRoot>>,
+) {
+    paused.0 = false;
+    for e in &q {
+        commands.entity(e).despawn_recursive();
     }
 }
 
@@ -317,5 +760,29 @@ fn despawn_game_entities(
     *tile_grid = TileGrid::default();
     for entity in &query {
         commands.entity(entity).despawn();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn animated_tile_rects_stay_within_tilesheet_bounds() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Tilesheetinfo.tsi");
+        let info = crate::tile_properties::load_tile_properties(path.to_str().unwrap()).unwrap();
+
+        for tile_id in 1..2320i32 {
+            for tile_type in 0..=2 {
+                for f in 0..6 {
+                    let r = animated_tile_source_rect(tile_id, tile_type, &info, f % 3, f % 4, f);
+                    assert!(r.min.x >= 0.0 && r.max.x <= TILESHEET_W);
+                    assert!(r.min.y >= 0.0 && r.max.y <= TILESHEET_H);
+                    assert_eq!(r.width(), TILE_W);
+                    assert_eq!(r.height(), TILE_H);
+                }
+            }
+        }
     }
 }

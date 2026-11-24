@@ -6,12 +6,22 @@ pub enum GameState {
     /// Assets are being loaded.
     #[default]
     Loading,
-    /// Main menu is shown.
+    /// Main menu is shown (with level pack selector and Options).
     Menu,
+    /// Options screen (SFX / Music volume & level pack).
+    Options,
     /// Reloads target stage data and shows a brief stage banner before gameplay.
     StageTransition,
     /// Gameplay is active.
     InGame,
     /// Game over (or victory) screen.
     GameOver,
+}
+
+/// Pauses active gameplay simulation without despawning the current stage.
+#[derive(Resource, Default)]
+pub struct GamePaused(pub bool);
+
+pub fn not_paused(paused: Res<GamePaused>) -> bool {
+    !paused.0
 }
