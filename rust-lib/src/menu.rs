@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::assets::LevelData;
+use crate::assets::{GameAssets, LevelData};
 use crate::audio::{SfxEvent, SfxKind};
 use crate::hud::HudState;
 use crate::states::GameState;
@@ -37,10 +37,28 @@ fn format_menu_item(idx: usize, selected: usize, pack_name: &str) -> String {
     }
 }
 
+/// Source rect for the original 320x200 title art embedded in `Tiles.png` (`LOOP_Menu.cpp:279-282`).
+pub const TITLE_BANNER_RECT: Rect = Rect {
+    min: Vec2::new(0.0, 1000.0),
+    max: Vec2::new(320.0, 1200.0),
+};
+
+/// 32x32 menu icon rects from `Interface.png` (`LOOP_Menu.cpp:148-266`).
+fn menu_icon_rect(idx: usize) -> Rect {
+    let (x, y) = match idx {
+        0 => (256.0, 240.0), // Start / Resume
+        1 => (256.0, 208.0), // Load Stagefile
+        2 => (288.0, 208.0), // Options
+        _ => (288.0, 240.0), // Quit
+    };
+    Rect::new(x, y, x + 32.0, y + 32.0)
+}
+
 fn spawn_menu(
     mut commands: Commands,
     mut sel:      ResMut<MenuSelection>,
     level:        Res<LevelData>,
+    assets:       Res<GameAssets>,
 ) {
     sel.0 = 0;
 
@@ -53,30 +71,60 @@ fn spawn_menu(
                 flex_direction:  FlexDirection::Column,
                 align_items:     AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                row_gap:         Val::Px(16.0),
+                row_gap:         Val::Px(14.0),
                 ..default()
             },
             BackgroundColor(Color::srgb(0.05, 0.05, 0.15)),
         ))
         .with_children(|parent| {
+            // Original C64 title screen banner from Tiles.png (320x200)
             parent.spawn((
-                Text::new("OpenGGS"),
-                TextFont { font_size: 64.0, ..default() },
-                TextColor(Color::srgb(1.0, 0.85, 0.2)),
+                ImageNode {
+                    image: assets.tiles.clone(),
+                    rect: Some(TITLE_BANNER_RECT),
+                    ..default()
+                },
+                Node {
+                    width:  Val::Px(320.0),
+                    height: Val::Px(200.0),
+                    margin: UiRect::bottom(Val::Px(6.0)),
+                    ..default()
+                },
             ));
 
             for i in 0..MENU_ITEM_COUNT {
-                parent.spawn((
-                    MenuItemText(i),
-                    Text::new(format_menu_item(i, sel.0, level.pack_name())),
-                    TextFont { font_size: 28.0, ..default() },
-                    TextColor(if i == sel.0 { Color::srgb(1.0, 0.9, 0.3) } else { Color::WHITE }),
-                ));
+                parent
+                    .spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items:    AlignItems::Center,
+                        column_gap:     Val::Px(10.0),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        row.spawn((
+                            ImageNode {
+                                image: assets.interface.clone(),
+                                rect: Some(menu_icon_rect(i)),
+                                ..default()
+                            },
+                            Node {
+                                width:  Val::Px(24.0),
+                                height: Val::Px(24.0),
+                                ..default()
+                            },
+                        ));
+                        row.spawn((
+                            MenuItemText(i),
+                            Text::new(format_menu_item(i, sel.0, level.pack_name())),
+                            TextFont { font_size: 26.0, ..default() },
+                            TextColor(if i == sel.0 { Color::srgb(1.0, 0.9, 0.3) } else { Color::WHITE }),
+                        ));
+                    });
             }
 
             parent.spawn((
-                Text::new("Arrows: Move | Space/Up: Jump | Ctrl/X: Shoot | P/ESC: Pause"),
-                TextFont { font_size: 16.0, ..default() },
+                Text::new("Arrows: Move | Space/Up: Jump | Down: Fast-Fall | Ctrl/X: Shoot | P/ESC: Pause"),
+                TextFont { font_size: 14.0, ..default() },
                 TextColor(Color::srgb(0.72, 0.78, 0.9)),
             ));
         });

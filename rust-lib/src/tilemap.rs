@@ -56,6 +56,20 @@ pub struct SpawnDropStoneEvent {
     pub y: f32,
 }
 
+/// Parallax scenery element positioned at `base_x + stage_scroll_x * factor`
+/// (matches C++ half-speed scrolling clouds, tubes, and indoor bricks in `STAGE_Draw.cpp`).
+#[derive(Component)]
+pub struct ParallaxLayer {
+    pub base_x: f32,
+    pub factor: f32,
+}
+
+/// Computes world X for a parallax background element so it scrolls at `(1 - factor)` of camera speed.
+/// With `factor = 0.5`, screen X moves at half camera speed (`base_x - stage_scroll_x / 2`).
+pub fn parallax_world_x(base_x: f32, stage_scroll_x: f32, factor: f32) -> f32 {
+    base_x + stage_scroll_x * factor
+}
+
 /// Vertical moving platform (matches C++ `Platform` in `GRAPHICS_Sprites_Move.cpp`).
 #[derive(Component)]
 pub struct MovingPlatform {
@@ -368,7 +382,7 @@ impl Plugin for TileMapPlugin {
            .add_systems(OnExit(GameState::StageTransition), exit_stage_transition)
            .add_systems(
                OnEnter(GameState::InGame),
-               (clear_pause_state, spawn_tiles, spawn_platform, reset_camera),
+               (clear_pause_state, spawn_tiles, spawn_parallax_background, spawn_platform, reset_camera),
            )
            .add_systems(
                FixedUpdate,
@@ -386,7 +400,9 @@ impl Plugin for TileMapPlugin {
                (
                    toggle_pause,
                    pause_menu_input,
-                   (animate_tiles, camera_follow, ingame_shortcuts).run_if(not_paused),
+                   (animate_tiles, camera_follow, update_parallax, ingame_shortcuts)
+                       .chain()
+                       .run_if(not_paused),
                )
                    .run_if(in_state(GameState::InGame)),
            )
@@ -568,6 +584,145 @@ fn spawn_tiles(
             }
             tile_grid.entities[x][y] = Some(ec.id());
         }
+    }
+}
+
+/// Deterministic LCG for placing stage parallax clouds & tubes without external RNG deps.
+fn bg_lcg(seed: &mut u64) -> u32 {
+    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    (*seed >> 32) as u32
+}
+
+fn spawn_parallax_background(
+    mut commands: Commands,
+    level:        Res<LevelData>,
+    assets:       Res<GameAssets>,
+) {
+    let mut seed = (level.stage_number as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(42);
+
+    if level.stage.background_colour == 0 {
+        // Outdoors: 12 scrolling clouds (tile 104: 5x2 tiles = 80x32 px)
+        let cloud_rect = Rect::new(
+            (104 % TILES_PER_ROW) as f32 * TILE_W,
+            (104 / TILES_PER_ROW) as f32 * TILE_H,
+            ((104 % TILES_PER_ROW) + 5) as f32 * TILE_W,
+            ((104 / TILES_PER_ROW) + 2) as f32 * TILE_H,
+        );
+        for _ in 0..12 {
+            let cx = (bg_lcg(&mut seed) % 2400) as f32;
+            let cy = -((32 + (bg_lcg(&mut seed) % 118)) as f32);
+            commands.spawn((
+                GameEntity,
+                ParallaxLayer { base_x: cx, factor: 0.5 },
+                Sprite {
+                    image: assets.tiles.clone(),
+                    rect: Some(cloud_rect),
+                    custom_size: Some(Vec2::new(80.0, 32.0)),
+                    anchor: bevy::sprite::Anchor::TopLeft,
+                    ..default()
+                },
+                Transform::from_xyz(cx, cy, -2.0),
+            ));
+        }
+
+        // Outdoors: 4 semi-transparent background tubes (tile 514: 6x3 tiles = 96x48 px, 2 stacked)
+        // Matches C++ STAGE_Draw.cpp:121-198
+        let tube_rect = Rect::new(
+            (514 % TILES_PER_ROW) as f32 * TILE_W,
+            (514 / TILES_PER_ROW) as f32 * TILE_H,
+            ((514 % TILES_PER_ROW) + 6) as f32 * TILE_W,
+            ((514 / TILES_PER_ROW) + 3) as f32 * TILE_H,
+        );
+        let tube_color = Color::srgba(1.0, 1.0, 1.0, 100.0 / 255.0);
+        for i in 0..4 {
+            let tx = (i * 500 + (bg_lcg(&mut seed) % 360)) as f32;
+            let has_fire = (bg_lcg(&mut seed) % 2) == 1;
+            for stack in 0..2 {
+                let ty = -(440.0 - (stack as f32 * 48.0));
+                commands.spawn((
+                    GameEntity,
+                    ParallaxLayer { base_x: tx, factor: 0.5 },
+                    Sprite {
+                        image: assets.tiles.clone(),
+                        rect: Some(tube_rect),
+                        custom_size: Some(Vec2::new(96.0, 48.0)),
+                        color: tube_color,
+                        anchor: bevy::sprite::Anchor::TopLeft,
+                        ..default()
+                    },
+                    Transform::from_xyz(tx, ty, -1.5),
+                ));
+            }
+            if has_fire {
+                let fire_top_y = -(440.0 - 48.0 - 32.0);
+                for row in 0..2 {
+                    for col in 0..4 {
+                        let fid = if row == 0 { 6 + col } else { 46 + col };
+                        let fx = tx + (col + 1) as f32 * TILE_W;
+                        let fy = fire_top_y - row as f32 * TILE_H;
+                        let rect = animated_tile_source_rect(fid, level.stage.tile_type, &level.tile_info, 0, 0, 0);
+                        commands.spawn((
+                            GameEntity,
+                            Tile { tile_id: fid },
+                            AnimatedTile,
+                            ParallaxLayer { base_x: fx, factor: 0.5 },
+                            Sprite {
+                                image: assets.tiles.clone(),
+                                rect: Some(rect),
+                                custom_size: Some(Vec2::new(TILE_W, TILE_H)),
+                                color: Color::srgba(1.0, 1.0, 1.0, 0.55),
+                                anchor: bevy::sprite::Anchor::TopLeft,
+                                ..default()
+                            },
+                            Transform::from_xyz(fx, fy, -1.4),
+                        ));
+                    }
+                }
+            }
+        }
+    } else {
+        // Indoors: semi-transparent repeating 2x2 brick backdrop (tile 672, matches STAGE_Draw.cpp:204-242)
+        let brick_rect = Rect::new(
+            (672 % TILES_PER_ROW) as f32 * TILE_W,
+            (672 / TILES_PER_ROW) as f32 * TILE_H,
+            ((672 % TILES_PER_ROW) + 2) as f32 * TILE_W,
+            ((672 / TILES_PER_ROW) + 2) as f32 * TILE_H,
+        );
+        let brick_color = Color::srgba(1.0, 1.0, 1.0, 80.0 / 255.0);
+        let max_cols = ((level.stage_width_px * 0.65) / 32.0).ceil() as usize + 16;
+        for bx_idx in 0..max_cols.min(84) {
+            let bx = bx_idx as f32 * 32.0;
+            for by_idx in 4..15 {
+                let by = -(by_idx as f32 * 32.0);
+                commands.spawn((
+                    GameEntity,
+                    ParallaxLayer { base_x: bx, factor: 0.5 },
+                    Sprite {
+                        image: assets.tiles.clone(),
+                        rect: Some(brick_rect),
+                        custom_size: Some(Vec2::new(32.0, 32.0)),
+                        color: brick_color,
+                        anchor: bevy::sprite::Anchor::TopLeft,
+                        ..default()
+                    },
+                    Transform::from_xyz(bx, by, -2.0),
+                ));
+            }
+        }
+    }
+}
+
+fn update_parallax(
+    win_q: Query<&Window>,
+    cam_q: Query<&Transform, (With<PersistentCamera>, Without<ParallaxLayer>)>,
+    mut q: Query<(&mut Transform, &ParallaxLayer)>,
+) {
+    let Ok(cam_tf) = cam_q.get_single() else { return };
+    let viewport_w = win_q.get_single().map(|w| w.width()).unwrap_or(800.0);
+    let stage_scroll_x = (cam_tf.translation.x - viewport_w * 0.5).max(0.0);
+
+    for (mut tf, layer) in &mut q {
+        tf.translation.x = parallax_world_x(layer.base_x, stage_scroll_x, layer.factor);
     }
 }
 
@@ -1008,5 +1163,15 @@ mod tests {
         // On a 2000px-wide stage, camera clamps between 400 and 1600.
         assert_eq!(clamp_camera_x(100.0, 2000.0, 800.0), 400.0);
         assert_eq!(clamp_camera_x(1900.0, 2000.0, 800.0), 1600.0);
+    }
+
+    #[test]
+    fn parallax_scrolls_at_half_camera_speed() {
+        let base_x = 120.0;
+        let scroll = 200.0;
+        let world_x = parallax_world_x(base_x, scroll, 0.5);
+        // Apparent screen X = world_x - scroll = base_x - scroll/2
+        let screen_x = world_x - scroll;
+        assert_eq!(screen_x, base_x - 100.0);
     }
 }
