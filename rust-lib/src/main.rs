@@ -13,6 +13,7 @@ mod options;
 mod paths;
 mod player;
 mod powerup;
+mod random_gen;
 mod screens;
 mod states;
 mod tile_properties;

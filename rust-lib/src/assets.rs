@@ -5,6 +5,7 @@ use bevy::prelude::*;
 
 use crate::level::{self, ImportStage};
 use crate::paths::{discover_stage_packs, AssetPaths, StagePack};
+use crate::random_gen::{generate_random_stage, RandomModuleBank};
 use crate::states::GameState;
 use crate::tile_properties::{self, TileSheetInfo};
 
@@ -42,6 +43,8 @@ pub struct LevelData {
     pub sub_stage_entry_stage: Option<usize>,
     pub sub_stage_counter:     usize,
     pub is_warping:            bool,
+    pub random_levels:         bool,
+    pub random_seed:           u64,
     pub stage_width_px:        f32,
     pub stage:                 ImportStage,
     pub tile_info:             TileSheetInfo,
@@ -76,7 +79,30 @@ impl LevelData {
         self.stage_width_px = crate::tilemap::compute_stage_width_pixels(&self.stage, 800.0);
     }
 
-    pub fn load_stage_number(&mut self, stage_number: usize, checkpoint: usize) -> io::Result<()> {
+    pub fn load_stage_number(
+        &mut self,
+        stage_number: usize,
+        checkpoint: usize,
+        module_bank: Option<&RandomModuleBank>,
+    ) -> io::Result<()> {
+        if self.random_levels && stage_number <= MAX_CLASSIC_STAGE {
+            if let Some(bank) = module_bank {
+                let bg = if stage_number % 2 == 1 { 0 } else { 1 };
+                if let Some(generated) = generate_random_stage(
+                    bank,
+                    stage_number,
+                    bg,
+                    &self.tile_info,
+                    self.random_seed,
+                ) {
+                    self.stage = generated;
+                    self.stage_number = stage_number;
+                    self.checkpoint = checkpoint.min(3);
+                    self.refresh_stage_width();
+                    return Ok(());
+                }
+            }
+        }
         let path_str = self.stage_file.to_string_lossy();
         let loaded = level::load_stage(&path_str, stage_number)?;
         self.stage = loaded;
@@ -132,6 +158,9 @@ fn start_loading(
     )
     .expect("Failed to load Tilesheetinfo.tsi");
 
+    let module_bank = RandomModuleBank::load_from_file(&paths.modules_file()).unwrap_or_default();
+    commands.insert_resource(module_bank);
+
     let stage_width_px = crate::tilemap::compute_stage_width_pixels(&stage, 800.0);
 
     commands.insert_resource(LevelData {
@@ -143,6 +172,8 @@ fn start_loading(
         sub_stage_entry_stage: None,
         sub_stage_counter: 0,
         is_warping: false,
+        random_levels: false,
+        random_seed: 2026,
         stage_width_px,
         stage,
         tile_info,

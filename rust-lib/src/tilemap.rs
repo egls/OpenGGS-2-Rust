@@ -420,12 +420,13 @@ fn clear_pause_state(mut paused: ResMut<GamePaused>, mut sel: ResMut<PauseSelect
 fn enter_stage_transition(
     mut commands: Commands,
     mut level:    ResMut<LevelData>,
+    module_bank:  Option<Res<crate::random_gen::RandomModuleBank>>,
     hud:          Res<HudState>,
     mut next:     ResMut<NextState<GameState>>,
 ) {
     let target_stage = hud.stage.clamp(1, MAX_SUBSTAGE_INDEX);
     let checkpoint = level.checkpoint;
-    if let Err(err) = level.load_stage_number(target_stage, checkpoint) {
+    if let Err(err) = level.load_stage_number(target_stage, checkpoint, module_bank.as_deref()) {
         eprintln!("Failed to load stage {}: {}", target_stage, err);
         next.set(GameState::GameOver);
         return;

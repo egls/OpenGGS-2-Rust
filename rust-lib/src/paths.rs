@@ -22,10 +22,6 @@ impl AssetPaths {
         }
     }
 
-    pub fn from_dir(base_dir: PathBuf) -> Self {
-        Self { base_dir }
-    }
-
     pub fn stages_dir(&self) -> PathBuf {
         self.base_dir.join("stages")
     }

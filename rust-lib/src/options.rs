@@ -192,7 +192,7 @@ struct OptionRowText(usize);
 #[derive(Resource, Default)]
 struct OptionsSelection(usize);
 
-const OPTION_COUNT: usize = 6;
+const OPTION_COUNT: usize = 7;
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 
@@ -303,11 +303,12 @@ fn format_option_row(
 ) -> String {
     let prefix = if idx == selected { "> " } else { "  " };
     match idx {
-        0 => format!("{}SFX VOLUME:   < {}% >", prefix, audio.sfx_volume),
-        1 => format!("{}MUSIC VOLUME: < {}% >", prefix, audio.music_volume),
-        2 => format!("{}STAGE PACK:   < {} >", prefix, level.pack_name()),
-        3 => format!("{}RESOLUTION:   < {} >", prefix, display.resolution.label()),
-        4 => format!("{}FULLSCREEN:   < {} >", prefix, if display.fullscreen { "ON" } else { "OFF" }),
+        0 => format!("{}SFX VOLUME:    < {}% >", prefix, audio.sfx_volume),
+        1 => format!("{}MUSIC VOLUME:  < {}% >", prefix, audio.music_volume),
+        2 => format!("{}STAGE PACK:    < {} >", prefix, level.pack_name()),
+        3 => format!("{}RANDOM LEVELS: < {} >", prefix, if level.random_levels { "ON" } else { "OFF" }),
+        4 => format!("{}RESOLUTION:    < {} >", prefix, display.resolution.label()),
+        5 => format!("{}FULLSCREEN:    < {} >", prefix, if display.fullscreen { "ON" } else { "OFF" }),
         _ => format!("{}BACK TO MENU", prefix),
     }
 }
@@ -428,6 +429,15 @@ fn options_input(
             }
         }
         3 => {
+            if left || right || enter {
+                level.random_levels = !level.random_levels;
+                if level.random_levels {
+                    level.random_seed = level.random_seed.wrapping_add(1337);
+                }
+                dirty = true;
+            }
+        }
+        4 => {
             if left {
                 display.resolution = display.resolution.prev();
                 dirty = true;
@@ -436,7 +446,7 @@ fn options_input(
                 dirty = true;
             }
         }
-        4 => {
+        5 => {
             if left || right || enter {
                 display.fullscreen = !display.fullscreen;
                 dirty = true;
