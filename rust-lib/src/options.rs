@@ -4,8 +4,9 @@ use std::mem;
 
 use bevy::prelude::*;
 
-use crate::assets::{LevelData, STAGE_PACKS};
+use crate::assets::LevelData;
 use crate::audio::{SfxEvent, SfxKind};
+use crate::paths::AssetPaths;
 use crate::states::GameState;
 
 /// Exact C++ `SavedOptions_Type` binary layout (`base/Options.oi`, 32 bytes).
@@ -104,7 +105,8 @@ pub struct OptionsPlugin;
 
 impl Plugin for OptionsPlugin {
     fn build(&self, app: &mut App) {
-        let initial = AudioSettings::from_options_file("../base/Options.oi");
+        let paths = AssetPaths::resolve();
+        let initial = AudioSettings::from_options_file(paths.options_file().to_str().unwrap_or(""));
         app.insert_resource(initial)
            .init_resource::<OptionsSelection>()
            .add_systems(OnEnter(GameState::Options), spawn_options)
@@ -223,13 +225,16 @@ fn options_input(
             }
         }
         2 => {
+            let count = level.pack_count();
             if left {
-                let idx = (level.pack_index + STAGE_PACKS.len() - 1) % STAGE_PACKS.len();
+                let idx = (level.pack_index + count - 1) % count;
                 level.set_pack(idx);
+                sfx.send(SfxEvent(SfxKind::Disk));
                 dirty = true;
             } else if right || enter {
-                let idx = (level.pack_index + 1) % STAGE_PACKS.len();
+                let idx = (level.pack_index + 1) % count;
                 level.set_pack(idx);
+                sfx.send(SfxEvent(SfxKind::Disk));
                 dirty = true;
             }
         }

@@ -97,8 +97,8 @@ impl Plugin for PowerUpPlugin {
 
 // ── Frame loading ─────────────────────────────────────────────────────────────
 
-fn load_powerup_sprites_system(mut commands: Commands) {
-    let frames = load_powerup_frames("../base/c64/PowerUp.txt");
+fn load_powerup_sprites_system(mut commands: Commands, paths: Res<crate::paths::AssetPaths>) {
+    let frames = load_powerup_frames(paths.c64_file("PowerUp.txt").to_str().unwrap_or(""));
     commands.insert_resource(frames);
 }
 

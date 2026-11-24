@@ -1,20 +1,15 @@
 use std::io;
-use std::path::Path;
+use std::path::PathBuf;
 
 use bevy::prelude::*;
 
 use crate::level::{self, ImportStage};
+use crate::paths::{discover_stage_packs, AssetPaths, StagePack};
 use crate::states::GameState;
 use crate::tile_properties::{self, TileSheetInfo};
 
 pub const MAX_CLASSIC_STAGE: usize = 33;
 pub const MAX_SUBSTAGE_INDEX: usize = 37;
-
-pub const STAGE_PACKS: &[(&str, &str)] = &[
-    ("Classic", "../base/stages/classic.lvl"),
-    ("New",     "../base/stages/new.lvl"),
-    ("Modules", "../base/stages/modules.lvl"),
-];
 
 // ── Resources ────────────────────────────────────────────────────────────────
 
@@ -24,6 +19,7 @@ pub struct GameAssets {
     pub player:     Handle<Image>,
     pub enemies:    Handle<Image>,
     pub powerups:   Handle<Image>,
+    pub interface:  Handle<Image>,
     pub jump_sfx:   Handle<AudioSource>,
     pub stomp_sfx:  Handle<AudioSource>,
     pub died_sfx:   Handle<AudioSource>,
@@ -33,12 +29,14 @@ pub struct GameAssets {
     pub shoot_sfx:  Handle<AudioSource>,
     pub portal_sfx: Handle<AudioSource>,
     pub click_sfx:  Handle<AudioSource>,
+    pub disk_sfx:   Handle<AudioSource>,
 }
 
 #[derive(Resource)]
 pub struct LevelData {
+    pub stage_packs:           Vec<StagePack>,
     pub pack_index:            usize,
-    pub stage_file:            String,
+    pub stage_file:            PathBuf,
     pub stage_number:          usize,
     pub checkpoint:            usize,
     pub sub_stage_entry_stage: Option<usize>,
@@ -48,21 +46,32 @@ pub struct LevelData {
 }
 
 impl LevelData {
+    pub fn pack_count(&self) -> usize {
+        self.stage_packs.len().max(1)
+    }
+
     pub fn set_pack(&mut self, index: usize) {
-        let idx = index % STAGE_PACKS.len();
+        if self.stage_packs.is_empty() {
+            return;
+        }
+        let idx = index % self.stage_packs.len();
         self.pack_index = idx;
-        self.stage_file = STAGE_PACKS[idx].1.to_string();
+        self.stage_file = self.stage_packs[idx].path.clone();
         self.sub_stage_entry_stage = None;
         self.sub_stage_counter = 0;
         self.checkpoint = 0;
     }
 
-    pub fn pack_name(&self) -> &'static str {
-        STAGE_PACKS[self.pack_index % STAGE_PACKS.len()].0
+    pub fn pack_name(&self) -> &str {
+        self.stage_packs
+            .get(self.pack_index)
+            .map(|p| p.name.as_str())
+            .unwrap_or("Classic")
     }
 
     pub fn load_stage_number(&mut self, stage_number: usize, checkpoint: usize) -> io::Result<()> {
-        let loaded = level::load_stage(&self.stage_file, stage_number)?;
+        let path_str = self.stage_file.to_string_lossy();
+        let loaded = level::load_stage(&path_str, stage_number)?;
         self.stage = loaded;
         self.stage_number = stage_number;
         self.checkpoint = checkpoint.min(3);
@@ -94,18 +103,29 @@ fn spawn_persistent_camera(mut commands: Commands) {
 
 // ── Systems ──────────────────────────────────────────────────────────────────
 
-fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let base = Path::new("..").join("base");
-    let stage_file = STAGE_PACKS[0].1.to_string();
+fn start_loading(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    paths:        Res<AssetPaths>,
+) {
+    let mut stage_packs = discover_stage_packs(&paths.stages_dir());
+    if stage_packs.is_empty() {
+        stage_packs.push(StagePack {
+            name: "Classic".to_string(),
+            path: paths.stages_dir().join("classic.lvl"),
+        });
+    }
+    let stage_file = stage_packs[0].path.clone();
 
-    let stage = level::load_stage(&stage_file, 1)
-        .expect("Failed to load classic.lvl");
+    let stage = level::load_stage(stage_file.to_str().unwrap(), 1)
+        .expect("Failed to load initial stage pack");
     let tile_info = tile_properties::load_tile_properties(
-        base.join("Tilesheetinfo.tsi").to_str().unwrap(),
+        paths.tilesheet_info().to_str().unwrap(),
     )
     .expect("Failed to load Tilesheetinfo.tsi");
 
     commands.insert_resource(LevelData {
+        stage_packs,
         pack_index: 0,
         stage_file,
         stage_number: 1,
@@ -116,12 +136,13 @@ fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
         tile_info,
     });
 
-    // Bevy resolves these relative to rust-lib/assets/ (symlink -> ../base)
+    // Bevy AssetPlugin root is configured directly to resolved `base/`.
     let assets = GameAssets {
         tiles:      asset_server.load("c64/Tiles.png"),
         player:     asset_server.load("c64/Player.png"),
         enemies:    asset_server.load("c64/Enemies.png"),
         powerups:   asset_server.load("c64/PowerUp.png"),
+        interface:  asset_server.load("Interface.png"),
         jump_sfx:   asset_server.load("audio/jump.wav"),
         stomp_sfx:  asset_server.load("audio/stomp.wav"),
         died_sfx:   asset_server.load("audio/died.wav"),
@@ -131,6 +152,7 @@ fn start_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
         shoot_sfx:  asset_server.load("audio/shoot.wav"),
         portal_sfx: asset_server.load("audio/portal.wav"),
         click_sfx:  asset_server.load("audio/click.wav"),
+        disk_sfx:   asset_server.load("audio/disk.wav"),
     };
     commands.insert_resource(assets);
 }
@@ -150,6 +172,7 @@ fn check_loading(
         asset_server.get_load_state(assets.player.id()),
         asset_server.get_load_state(assets.enemies.id()),
         asset_server.get_load_state(assets.powerups.id()),
+        asset_server.get_load_state(assets.interface.id()),
         asset_server.get_load_state(assets.jump_sfx.id()),
         asset_server.get_load_state(assets.stomp_sfx.id()),
         asset_server.get_load_state(assets.died_sfx.id()),
@@ -159,11 +182,12 @@ fn check_loading(
         asset_server.get_load_state(assets.shoot_sfx.id()),
         asset_server.get_load_state(assets.portal_sfx.id()),
         asset_server.get_load_state(assets.click_sfx.id()),
+        asset_server.get_load_state(assets.disk_sfx.id()),
     ];
 
     for s in &states {
         if matches!(s, Some(LoadState::Failed(_))) {
-            eprintln!("Asset failed to load! Check that rust-lib/assets symlink exists.");
+            eprintln!("Asset failed to load! Check base/ asset directory.");
             process_transparency(&assets, &mut images);
             next.set(GameState::Menu);
             return;
@@ -178,7 +202,13 @@ fn check_loading(
 }
 
 fn process_transparency(assets: &GameAssets, images: &mut Assets<Image>) {
-    let handles = [&assets.tiles, &assets.player, &assets.enemies, &assets.powerups];
+    let handles = [
+        &assets.tiles,
+        &assets.player,
+        &assets.enemies,
+        &assets.powerups,
+        &assets.interface,
+    ];
     for handle in handles {
         if let Some(image) = images.get_mut(handle) {
             for pixel in image.data.chunks_exact_mut(4) {

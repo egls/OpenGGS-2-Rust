@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::assets::{LevelData, STAGE_PACKS};
+use crate::assets::LevelData;
 use crate::audio::{SfxEvent, SfxKind};
 use crate::hud::HudState;
 use crate::states::GameState;
@@ -103,13 +103,16 @@ fn menu_input(
     }
 
     if sel.0 == 1 {
+        let count = level.pack_count();
         if keys.just_pressed(KeyCode::ArrowLeft) {
-            let idx = (level.pack_index + STAGE_PACKS.len() - 1) % STAGE_PACKS.len();
+            let idx = (level.pack_index + count - 1) % count;
             level.set_pack(idx);
+            sfx.send(SfxEvent(SfxKind::Disk));
             dirty = true;
         } else if keys.just_pressed(KeyCode::ArrowRight) {
-            let idx = (level.pack_index + 1) % STAGE_PACKS.len();
+            let idx = (level.pack_index + 1) % count;
             level.set_pack(idx);
+            sfx.send(SfxEvent(SfxKind::Disk));
             dirty = true;
         }
     }
@@ -137,8 +140,10 @@ fn menu_input(
                 next.set(GameState::StageTransition);
             }
             1 => {
-                let idx = (level.pack_index + 1) % STAGE_PACKS.len();
+                let count = level.pack_count();
+                let idx = (level.pack_index + 1) % count;
                 level.set_pack(idx);
+                sfx.send(SfxEvent(SfxKind::Disk));
                 for (item, mut text, mut color) in &mut text_q {
                     **text = format_menu_item(item.0, sel.0, level.pack_name());
                     color.0 = if item.0 == sel.0 {

@@ -9,6 +9,7 @@ use xmrsplayer::prelude::XmrsPlayer;
 
 use crate::assets::{GameAssets, LevelData};
 use crate::options::AudioSettings;
+use crate::paths::AssetPaths;
 use crate::states::GameState;
 
 const TRACKER_SAMPLE_RATE: u32 = 44_100;
@@ -26,6 +27,7 @@ pub enum SfxKind {
     Shoot,
     Portal,
     Click,
+    Disk,
 }
 
 #[derive(Event, Debug, Clone, Copy)]
@@ -134,10 +136,12 @@ impl Plugin for AudioPlugin {
 
 fn load_music_tracks(
     mut commands: Commands,
+    paths: Res<AssetPaths>,
     mut tracker_assets: ResMut<Assets<TrackerAudio>>,
 ) {
-    let mut load_one = |path: &str| -> Option<Handle<TrackerAudio>> {
-        match load_tracker_module(path) {
+    let mut load_one = |name: &str| -> Option<Handle<TrackerAudio>> {
+        let path = paths.music_file(name);
+        match load_tracker_module(path.to_str().unwrap_or("")) {
             Ok(module) => {
                 // Static lifetime for the 4 fixed game BGM tracks so XmrsPlayer<'static> streams safely.
                 let leaked: &'static Module = Box::leak(Box::new(module));
@@ -151,10 +155,10 @@ fn load_music_tracks(
     };
 
     commands.insert_resource(MusicAssets {
-        title:     load_one("../base/music/title.it"),
-        outdoors:  load_one("../base/music/outdoors.it"),
-        indoors:   load_one("../base/music/indoors.it"),
-        highscore: load_one("../base/music/highscore.it"),
+        title:     load_one("title.it"),
+        outdoors:  load_one("outdoors.it"),
+        indoors:   load_one("indoors.it"),
+        highscore: load_one("highscore.it"),
         current:   None,
     });
 }
@@ -181,6 +185,7 @@ fn play_sfx(
             SfxKind::Shoot  => assets.shoot_sfx.clone(),
             SfxKind::Portal => assets.portal_sfx.clone(),
             SfxKind::Click  => assets.click_sfx.clone(),
+            SfxKind::Disk   => assets.disk_sfx.clone(),
         };
         commands.spawn((
             AudioPlayer::new(handle),

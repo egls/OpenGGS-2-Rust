@@ -209,9 +209,10 @@ fn spawn_player(
     mut commands: Commands,
     level:        Res<LevelData>,
     assets:       Res<GameAssets>,
+    paths:        Res<crate::paths::AssetPaths>,
     hud:          Res<HudState>,
 ) {
-    let frames = load_player_frames("../base/c64/Player.txt");
+    let frames = load_player_frames(paths.c64_file("Player.txt").to_str().unwrap_or(""));
     let start = player_start_position(&level);
 
     let initial_rect = frame_for_state(

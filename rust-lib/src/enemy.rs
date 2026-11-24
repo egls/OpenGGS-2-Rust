@@ -171,8 +171,9 @@ fn spawn_enemies(
     mut commands: Commands,
     level:        Res<LevelData>,
     assets:       Res<GameAssets>,
+    paths:        Res<crate::paths::AssetPaths>,
 ) {
-    let types = load_enemy_frames("../base/c64/Enemies.txt");
+    let types = load_enemy_frames(paths.c64_file("Enemies.txt").to_str().unwrap_or(""));
     commands.insert_resource(EnemyFrames(types.clone()));
 
     for i in 0..50usize {
