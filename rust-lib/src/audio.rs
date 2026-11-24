@@ -204,6 +204,15 @@ fn update_bgm_track(
 ) {
     let desired = match state.get() {
         GameState::Loading => return,
+        GameState::StageEditor | GameState::TileEditor => {
+            if music.current.is_some() {
+                for ent in &bgm_q {
+                    commands.entity(ent).despawn();
+                }
+                music.current = None;
+            }
+            return;
+        }
         GameState::Menu | GameState::Options | GameState::Story | GameState::Credits => MusicTrack::Title,
         GameState::StageTransition | GameState::InGame => {
             let bg = level_opt.map(|l| l.stage.background_colour).unwrap_or(0);

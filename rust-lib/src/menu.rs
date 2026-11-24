@@ -26,16 +26,17 @@ struct MenuItemText(usize);
 #[derive(Resource, Default)]
 struct MenuSelection(usize);
 
-const MENU_ITEM_COUNT: usize = 6;
+const MENU_ITEM_COUNT: usize = 7;
 
 fn format_menu_item(idx: usize, selected: usize, pack_name: &str) -> String {
     let prefix = if idx == selected { "> " } else { "  " };
     match idx {
         0 => format!("{}START GAME", prefix),
         1 => format!("{}STAGE PACK: < {} >", prefix, pack_name),
-        2 => format!("{}OPTIONS", prefix),
-        3 => format!("{}STORY", prefix),
-        4 => format!("{}CREDITS", prefix),
+        2 => format!("{}STAGE EDITOR", prefix),
+        3 => format!("{}OPTIONS", prefix),
+        4 => format!("{}STORY", prefix),
+        5 => format!("{}CREDITS", prefix),
         _ => format!("{}QUIT", prefix),
     }
 }
@@ -51,9 +52,10 @@ fn menu_icon_rect(idx: usize) -> Rect {
     let (x, y) = match idx {
         0 => (256.0, 240.0), // Start / Resume
         1 => (256.0, 208.0), // Load Stagefile
-        2 => (288.0, 208.0), // Options
-        3 => (256.0, 272.0), // Story
-        4 => (320.0, 208.0), // Credits
+        2 => (288.0, 272.0), // Stage Editor
+        3 => (288.0, 208.0), // Options
+        4 => (256.0, 272.0), // Story
+        5 => (320.0, 208.0), // Credits
         _ => (288.0, 240.0), // Quit
     };
     Rect::new(x, y, x + 32.0, y + 32.0)
@@ -214,9 +216,10 @@ fn menu_input(
                     };
                 }
             }
-            2 => next.set(GameState::Options),
-            3 => next.set(GameState::Story),
-            4 => next.set(GameState::Credits),
+            2 => next.set(GameState::StageEditor),
+            3 => next.set(GameState::Options),
+            4 => next.set(GameState::Story),
+            5 => next.set(GameState::Credits),
             _ => {
                 exit.send(AppExit::Success);
             }

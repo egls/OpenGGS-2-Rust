@@ -15,7 +15,9 @@ mod player;
 mod powerup;
 mod random_gen;
 mod screens;
+mod stage_editor;
 mod states;
+mod tile_editor;
 mod tile_properties;
 mod tilemap;
 
@@ -58,6 +60,8 @@ fn main() {
             MenuPlugin,
             options::OptionsPlugin,
             screens::ScreensPlugin,
+            stage_editor::StageEditorPlugin,
+            tile_editor::TileEditorPlugin,
             TileMapPlugin,
             PlayerPlugin,
             EnemyPlugin,

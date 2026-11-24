@@ -14,6 +14,10 @@ pub enum GameState {
     Story,
     /// Original credits screen.
     Credits,
+    /// In-game stage / level editor (OpenGGS Maker).
+    StageEditor,
+    /// In-game tilesheet property editor (`Tilesheetinfo.tsi`).
+    TileEditor,
     /// Reloads target stage data and shows a brief stage banner before gameplay.
     StageTransition,
     /// Gameplay is active.

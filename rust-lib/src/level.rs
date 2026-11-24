@@ -1,5 +1,5 @@
-use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom};
+use std::fs::{File, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::mem;
 
 const MAX_NUM_ENEMIES: usize = 50;
@@ -60,6 +60,24 @@ pub fn load_stage(file_path: &str, stage_index: usize) -> io::Result<ImportStage
     Ok(stage)
 }
 
+/// Writes a single `ImportStage` record at `stage_index` inside a `.lvl` pack without truncating
+/// other stages (matches C++ `STAGE_Save` in `src/CONTENT_Stages_Load_Write.cpp:100-105`).
+pub fn save_stage(file_path: &str, stage_index: usize, stage: &ImportStage) -> io::Result<()> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(file_path)?;
+    let struct_size = mem::size_of::<ImportStage>();
+    file.seek(SeekFrom::Start((stage_index * struct_size) as u64))?;
+    let buffer = unsafe {
+        std::slice::from_raw_parts(stage as *const ImportStage as *const u8, struct_size)
+    };
+    file.write_all(buffer)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +135,36 @@ mod tests {
             let has_tiles = stage.array.iter().flat_map(|c| c.iter()).any(|&id| id != 0);
             assert!(has_tiles, "{} stage 1 has no tiles", pack);
         }
+    }
+
+    #[test]
+    fn save_stage_round_trips_without_corrupting_adjacent_stages() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let tmp = std::env::temp_dir().join(format!(
+            "openggs_stage_save_test_{}.lvl",
+            std::process::id()
+        ));
+        std::fs::copy(&src, &tmp).expect("copy classic.lvl to temp");
+
+        let original_s2 = load_stage(tmp.to_str().unwrap(), 2).unwrap();
+        let mut modified_s1 = load_stage(tmp.to_str().unwrap(), 1).unwrap();
+        modified_s1.array[10][10] = 501;
+        modified_s1.background_colour = 1;
+        modified_s1.enemy_in_use[0] = 1;
+        modified_s1.enemy_type[0] = 5;
+        modified_s1.enemy_pos_x[0] = 320;
+        modified_s1.enemy_pos_y[0] = 240;
+
+        save_stage(tmp.to_str().unwrap(), 1, &modified_s1).expect("save_stage should succeed");
+
+        let reloaded_s1 = load_stage(tmp.to_str().unwrap(), 1).unwrap();
+        let reloaded_s2 = load_stage(tmp.to_str().unwrap(), 2).unwrap();
+        let _ = std::fs::remove_file(&tmp);
+
+        assert_eq!(reloaded_s1.array[10][10], 501);
+        assert_eq!(reloaded_s1.background_colour, 1);
+        assert_eq!(reloaded_s1.enemy_type[0], 5);
+        assert_eq!(reloaded_s1.enemy_pos_x[0], 320);
+        assert_eq!(reloaded_s2.array, original_s2.array);
     }
 }

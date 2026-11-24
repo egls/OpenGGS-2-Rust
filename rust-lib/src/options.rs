@@ -192,7 +192,7 @@ struct OptionRowText(usize);
 #[derive(Resource, Default)]
 struct OptionsSelection(usize);
 
-const OPTION_COUNT: usize = 7;
+const OPTION_COUNT: usize = 8;
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 
@@ -309,6 +309,7 @@ fn format_option_row(
         3 => format!("{}RANDOM LEVELS: < {} >", prefix, if level.random_levels { "ON" } else { "OFF" }),
         4 => format!("{}RESOLUTION:    < {} >", prefix, display.resolution.label()),
         5 => format!("{}FULLSCREEN:    < {} >", prefix, if display.fullscreen { "ON" } else { "OFF" }),
+        6 => format!("{}EDIT TILES (Tilesheetinfo.tsi)", prefix),
         _ => format!("{}BACK TO MENU", prefix),
     }
 }
@@ -450,6 +451,13 @@ fn options_input(
             if left || right || enter {
                 display.fullscreen = !display.fullscreen;
                 dirty = true;
+            }
+        }
+        6 => {
+            if enter {
+                sfx.send(SfxEvent(SfxKind::Click));
+                next.set(GameState::TileEditor);
+                return;
             }
         }
         _ => {
