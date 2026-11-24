@@ -6,8 +6,9 @@ use crate::hud::HudState;
 use crate::powerup::{FireBulletEvent, SpawnCoinPopEvent, SpawnPowerUpEvent};
 use crate::states::{not_paused, GameState};
 use crate::tilemap::{
-    set_tile, trigger_crumble_tile, GameEntity, MovingPlatform, Tile, TileGrid, STAGE_COLS,
-    STAGE_ROWS, TILES_PER_ROW,
+    next_tile_switch_id, schedule_tile_switch, set_tile, trigger_crumble_tile, DropStone,
+    GameEntity, MovingPlatform, SpawnDropStoneEvent, Tile, TileGrid, STAGE_COLS, STAGE_ROWS,
+    TILES_PER_ROW,
 };
 
 // ── Components ────────────────────────────────────────────────────────────────
@@ -30,6 +31,8 @@ pub struct PlayerState {
     pub death_timer:  f32,
     pub invuln_timer: f32,
     pub morph_timer:  f32,
+    pub warp_timer:   f32,
+    pub warp_target:  Option<usize>,
     pub coyote_timer: f32,
     pub furthest_x:   f32,
 }
@@ -41,6 +44,8 @@ impl Default for PlayerState {
             death_timer: 0.0,
             invuln_timer: 1.0, // brief spawn protection
             morph_timer: 0.0,
+            warp_timer: 0.0,
+            warp_target: None,
             coyote_timer: 0.0,
             furthest_x: 0.0,
         }
@@ -128,6 +133,7 @@ impl Plugin for PlayerPlugin {
                    apply_gravity,
                    apply_movement,
                    check_non_solid_tiles,
+                   tick_warp_sequence,
                    handle_player_kill,
                    tick_dead_player,
                )
@@ -302,7 +308,7 @@ fn player_input(
         pstate.morph_timer = (pstate.morph_timer - dt).max(0.0);
     }
 
-    if !pstate.alive {
+    if !pstate.alive || pstate.warp_timer > 0.0 {
         return;
     }
 
@@ -349,10 +355,49 @@ fn player_input(
     }
 }
 
-fn apply_gravity(mut q: Query<(&mut Velocity, &PlayerState), With<Player>>) {
-    let Ok((mut vel, _)) = q.get_single_mut() else { return };
-    vel.vy -= GRAVITY;
-    if vel.vy < -TERMINAL_VEL { vel.vy = -TERMINAL_VEL; }
+/// Computes vertical velocity step with gravity, variable jump release cut, and ArrowDown fast-fall
+/// (matches C++ `PLAYER_Jump.cpp:25-66`).
+pub fn step_player_vertical_velocity(
+    vy:         f32,
+    alive:      bool,
+    on_ground:  bool,
+    jump_held:  bool,
+    down_held:  bool,
+) -> f32 {
+    let mut next_vy = (vy - GRAVITY).max(-TERMINAL_VEL);
+    if alive {
+        if !jump_held && next_vy > 0.0 {
+            next_vy -= 2.0 * GRAVITY;
+        }
+        if !on_ground && down_held {
+            next_vy = -TERMINAL_VEL;
+        }
+    }
+    next_vy
+}
+
+/// Computes destination stage for a warp stone bump (matches C++ `LOOP_Gameloop_Splashscreens.cpp:82-85`).
+pub fn resolve_warp_target(current_stage: usize, stage_warp_to: i32) -> usize {
+    if (1..=MAX_CLASSIC_STAGE as i32).contains(&stage_warp_to) {
+        stage_warp_to as usize
+    } else {
+        (current_stage + 3).min(MAX_CLASSIC_STAGE)
+    }
+}
+
+fn apply_gravity(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut q: Query<(&mut Velocity, &OnGround, &PlayerState), With<Player>>,
+) {
+    let Ok((mut vel, on_ground, pstate)) = q.get_single_mut() else { return };
+    if pstate.warp_timer > 0.0 {
+        vel.vx = 0.0;
+        vel.vy = 0.0;
+        return;
+    }
+    let jump_held = keys.pressed(KeyCode::Space) || keys.pressed(KeyCode::ArrowUp);
+    let down_held = keys.pressed(KeyCode::ArrowDown);
+    vel.vy = step_player_vertical_velocity(vel.vy, pstate.alive, on_ground.0, jump_held, down_held);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -360,17 +405,22 @@ fn apply_movement(
     mut commands:     Commands,
     mut q:            Query<(&mut Transform, &mut Velocity, &mut OnGround, &mut PlayerState), With<Player>>,
     plat_q:           Query<(&Transform, &MovingPlatform), Without<Player>>,
+    stone_q:          Query<(&Transform, &DropStone), (Without<Player>, Without<MovingPlatform>)>,
     mut level:        ResMut<LevelData>,
     mut tile_grid:    ResMut<TileGrid>,
-    mut tile_q:       Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
+    mut tile_q:       Query<(&mut Tile, &mut Sprite, &mut Visibility), (Without<Player>, Without<MovingPlatform>, Without<DropStone>)>,
     assets:           Res<GameAssets>,
     mut hud:          ResMut<HudState>,
     mut sfx:          EventWriter<SfxEvent>,
     mut powerup_ev:   EventWriter<SpawnPowerUpEvent>,
     mut coin_pop_ev:  EventWriter<SpawnCoinPopEvent>,
-    mut next_state:   ResMut<NextState<GameState>>,
+    mut dropstone_ev: EventWriter<SpawnDropStoneEvent>,
 ) {
     let Ok((mut tf, mut vel, mut on_ground, mut pstate)) = q.get_single_mut() else { return };
+
+    if pstate.warp_timer > 0.0 {
+        return;
+    }
 
     // Dead player falls off screen ignoring tile collisions (classic Giana/Mario death hop).
     if !pstate.alive {
@@ -381,17 +431,34 @@ fn apply_movement(
     on_ground.0 = false;
 
     tf.translation.x += vel.vx;
-    // Clamp within stage left/right edges
+    // Clamp within trimmed stage left/right edges
     if tf.translation.x < 0.0 {
         tf.translation.x = 0.0;
         vel.vx = 0.0;
     }
-    let max_x = STAGE_COLS as f32 * 16.0 - PLAYER_W;
+    let max_x = (level.stage_width_px - PLAYER_W).max(0.0);
     if tf.translation.x > max_x {
         tf.translation.x = max_x;
         vel.vx = 0.0;
     }
     resolve_x(&mut tf, &mut vel, &level);
+
+    // Horizontal collision against active drop stones (matches C++ PLAYER_Collision_Solids.cpp:360-371)
+    for (stf, stone) in &stone_q {
+        let px = tf.translation.x;
+        let py = -tf.translation.y;
+        let sx = stf.translation.x;
+        let sy = -stf.translation.y;
+        if aabb(px, py, PLAYER_W, PLAYER_H, sx, sy, stone.w, stone.h) {
+            if vel.vx > 0.0 {
+                tf.translation.x = sx - PLAYER_W;
+                vel.vx = 0.0;
+            } else if vel.vx < 0.0 {
+                tf.translation.x = sx + stone.w;
+                vel.vx = 0.0;
+            }
+        }
+    }
 
     let prev_bottom_y = tf.translation.y - PLAYER_H;
     tf.translation.y += vel.vy;
@@ -410,6 +477,26 @@ fn apply_movement(
             let landed = new_bottom_y <= plat_top + 2.0 && new_bottom_y >= plat_top - plat.height - 6.0;
             if overlap_x && was_above && landed {
                 tf.translation.y = plat_top + PLAYER_H;
+                vel.vy = 0.0;
+                on_ground.0 = true;
+                break;
+            }
+        }
+    }
+
+    // Standing on top of (or lifted onto) a DropStone (matches C++ PC_Collision_Down_Stone)
+    {
+        let px = tf.translation.x;
+        let new_bottom_y = tf.translation.y - PLAYER_H;
+        for (stf, stone) in &stone_q {
+            let sx_left = stf.translation.x;
+            let sx_right = sx_left + stone.w;
+            let stone_top = stf.translation.y;
+            let stone_bottom = stone_top - stone.h;
+            let overlap_x = px + PLAYER_W - 3.0 > sx_left && px + 3.0 < sx_right;
+            let landing = vel.vy <= 0.0 && new_bottom_y <= stone_top + 2.0 && new_bottom_y >= stone_bottom;
+            if overlap_x && landing {
+                tf.translation.y = stone_top + PLAYER_H;
                 vel.vy = 0.0;
                 on_ground.0 = true;
                 break;
@@ -447,10 +534,12 @@ fn apply_movement(
             &mut tile_q,
             &assets,
             &mut hud,
+            &mut pstate,
+            &mut vel,
             &mut sfx,
             &mut powerup_ev,
             &mut coin_pop_ev,
-            &mut next_state,
+            &mut dropstone_ev,
             btx,
             bty,
         );
@@ -565,11 +654,11 @@ fn find_3x2_block_left(
     None
 }
 
-fn replace_3x2_with_spent_block(
+fn replace_3x2_with_spent_block<F: bevy::ecs::query::QueryFilter>(
     commands:  &mut Commands,
     tile_grid: &mut TileGrid,
     level:     &mut LevelData,
-    tile_q:    &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
+    tile_q:    &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), F>,
     assets:    &GameAssets,
     left_x:    usize,
     bottom_y:  usize,
@@ -584,35 +673,70 @@ fn replace_3x2_with_spent_block(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn handle_head_bump_special(
-    commands:    &mut Commands,
-    tile_grid:   &mut TileGrid,
-    level:       &mut LevelData,
-    tile_q:      &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), Without<Player>>,
-    assets:      &GameAssets,
-    hud:         &mut HudState,
-    sfx:         &mut EventWriter<SfxEvent>,
-    powerup_ev:  &mut EventWriter<SpawnPowerUpEvent>,
-    coin_pop_ev: &mut EventWriter<SpawnCoinPopEvent>,
-    next_state:  &mut ResMut<NextState<GameState>>,
-    tx:          usize,
-    ty:          usize,
+/// Steps all 6 tiles of a 3×2 special block by `+3` and schedules timed frame switches
+/// (matches C++ `PC_Collision_CoinBlock`, `PC_Collision_CoinBlockHelmet`, `PC_Collision_Breakable`).
+fn step_3x2_block_plus_3<F: bevy::ecs::query::QueryFilter>(
+    commands:  &mut Commands,
+    tile_grid: &mut TileGrid,
+    level:     &mut LevelData,
+    tile_q:    &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), F>,
+    assets:    &GameAssets,
+    left_x:    usize,
+    bottom_y:  usize,
+    fallback_clear: bool,
 ) {
-    // 0. Hidden warp stone block -> warps to stage.warp_to_stage (matches C++ PC_Collision_WarpStone)
+    for dx in 0..3 {
+        for dy in [bottom_y - 1, bottom_y] {
+            let cur = level.stage.array[left_x + dx][dy];
+            let next_id = cur + 3;
+            if next_tile_switch_id(next_id).is_some() {
+                set_tile(commands, tile_grid, level, tile_q, assets, left_x + dx, dy, next_id);
+                schedule_tile_switch(commands, tile_grid, left_x + dx, dy, 0.14);
+            } else if fallback_clear {
+                set_tile(commands, tile_grid, level, tile_q, assets, left_x + dx, dy, 0);
+            } else {
+                // Non-5-coin / unexpected coin block ID -> settle cleanly to spent block
+                let spent = if dy == bottom_y - 1 { 587 + dx as i32 } else { 627 + dx as i32 };
+                set_tile(commands, tile_grid, level, tile_q, assets, left_x + dx, dy, spent);
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_head_bump_special<F: bevy::ecs::query::QueryFilter>(
+    commands:     &mut Commands,
+    tile_grid:    &mut TileGrid,
+    level:        &mut LevelData,
+    tile_q:       &mut Query<(&mut Tile, &mut Sprite, &mut Visibility), F>,
+    assets:       &GameAssets,
+    hud:          &mut HudState,
+    pstate:       &mut PlayerState,
+    vel:          &mut Velocity,
+    sfx:          &mut EventWriter<SfxEvent>,
+    powerup_ev:   &mut EventWriter<SpawnPowerUpEvent>,
+    coin_pop_ev:  &mut EventWriter<SpawnCoinPopEvent>,
+    dropstone_ev: &mut EventWriter<SpawnDropStoneEvent>,
+    tx:           usize,
+    ty:           usize,
+) {
+    // 0. Hidden warp stone block -> reveals warp tiles, freezes with morph, then warps
+    // (matches C++ PC_Collision_WarpStone + LOOP_Gameloop_Warpscreen)
     if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.warp_stone[id] != 0) {
-        replace_3x2_with_spent_block(commands, tile_grid, level, tile_q, assets, left_x, ty);
+        const WARP_TOP: [i32; 3] = [563, 564, 565];
+        const WARP_BOT: [i32; 3] = [603, 604, 605];
+        for dx in 0..3 {
+            set_tile(commands, tile_grid, level, tile_q, assets, left_x + dx, ty - 1, WARP_TOP[dx]);
+            schedule_tile_switch(commands, tile_grid, left_x + dx, ty - 1, 0.14);
+            set_tile(commands, tile_grid, level, tile_q, assets, left_x + dx, ty, WARP_BOT[dx]);
+            schedule_tile_switch(commands, tile_grid, left_x + dx, ty, 0.14);
+        }
         sfx.send(SfxEvent(SfxKind::Portal));
-        let warp_target = level.stage.warp_to_stage;
-        let next_stage = if (1..=MAX_CLASSIC_STAGE as i32).contains(&warp_target) {
-            warp_target as usize
-        } else {
-            (hud.stage + 1).min(MAX_CLASSIC_STAGE)
-        };
-        hud.stage = next_stage;
-        level.checkpoint = 0;
-        level.sub_stage_entry_stage = None;
-        next_state.set(GameState::StageTransition);
+        vel.vx = 0.0;
+        vel.vy = 0.0;
+        pstate.morph_timer = 0.65;
+        pstate.warp_timer = 0.65;
+        pstate.warp_target = Some(resolve_warp_target(hud.stage, level.stage.warp_to_stage));
         return;
     }
 
@@ -627,11 +751,9 @@ fn handle_head_bump_special(
         return;
     }
 
-    // 2. Coin block (standard or helmet)
-    if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| {
-        ti.coin_block[id] != 0 || ti.coin_block_helmet[id] != 0
-    }) {
-        replace_3x2_with_spent_block(commands, tile_grid, level, tile_q, assets, left_x, ty);
+    // 2. Standard coin block (single or 5-hit multi-coin block via +3 tile stepping)
+    if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.coin_block[id] != 0) {
+        step_3x2_block_plus_3(commands, tile_grid, level, tile_q, assets, left_x, ty, false);
         hud.add_coin();
         sfx.send(SfxEvent(SfxKind::Ding));
         coin_pop_ev.send(SpawnCoinPopEvent {
@@ -641,15 +763,62 @@ fn handle_head_bump_special(
         return;
     }
 
-    // 3. Breakable brick block (only Punk Giana, i.e. power_up >= 1, can smash bricks)
+    // Punk-only special blocks (matches C++ PLAYER_Collision_Solids.cpp:303-307)
     if hud.power_up >= 1 {
-        if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.breakable[id] != 0) {
+        // 3. Helmet coin block (Punk Giana only)
+        if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.coin_block_helmet[id] != 0) {
+            step_3x2_block_plus_3(commands, tile_grid, level, tile_q, assets, left_x, ty, false);
+            hud.add_coin();
+            sfx.send(SfxEvent(SfxKind::Ding));
+            coin_pop_ev.send(SpawnCoinPopEvent {
+                x: (left_x + 1) as f32 * 16.0,
+                y: -(ty.saturating_sub(2) as f32 * 16.0),
+            });
+            return;
+        }
+
+        // 4. Drop stone block (Punk Giana dislodges it into a falling solid sprite)
+        if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.drop_stone[id] != 0) {
             for dx in 0..3 {
                 set_tile(commands, tile_grid, level, tile_q, assets, left_x + dx, ty - 1, 0);
                 set_tile(commands, tile_grid, level, tile_q, assets, left_x + dx, ty, 0);
             }
+            dropstone_ev.send(SpawnDropStoneEvent {
+                x: left_x as f32 * 16.0,
+                y: -((ty - 1) as f32 * 16.0),
+            });
+            sfx.send(SfxEvent(SfxKind::Crack));
+            return;
+        }
+
+        // 5. Breakable brick block (steps through crack frames 504->507->0)
+        if let Some(left_x) = find_3x2_block_left(level, tx, ty, |ti, id| ti.breakable[id] != 0) {
+            step_3x2_block_plus_3(commands, tile_grid, level, tile_q, assets, left_x, ty, true);
             hud.score += 50;
             sfx.send(SfxEvent(SfxKind::Crack));
+        }
+    }
+}
+
+fn tick_warp_sequence(
+    time:           Res<Time<Fixed>>,
+    mut q:          Query<&mut PlayerState, With<Player>>,
+    mut hud:        ResMut<HudState>,
+    mut level:      ResMut<LevelData>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    let Ok(mut pstate) = q.get_single_mut() else { return };
+    if pstate.warp_timer <= 0.0 {
+        return;
+    }
+    pstate.warp_timer = (pstate.warp_timer - time.delta_secs()).max(0.0);
+    if pstate.warp_timer <= 0.0 {
+        if let Some(target) = pstate.warp_target.take() {
+            hud.stage = target;
+            level.checkpoint = 0;
+            level.sub_stage_entry_stage = None;
+            level.is_warping = true;
+            next_state.set(GameState::StageTransition);
         }
     }
 }
@@ -670,7 +839,7 @@ fn check_non_solid_tiles(
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     let Ok((tf, pstate)) = player_q.get_single() else { return };
-    if !pstate.alive {
+    if !pstate.alive || pstate.warp_timer > 0.0 {
         return;
     }
 
@@ -813,7 +982,7 @@ fn handle_player_kill(
         return;
     }
     let Ok((mut vel, mut pstate)) = player_q.get_single_mut() else { return };
-    if !pstate.alive {
+    if !pstate.alive || pstate.warp_timer > 0.0 {
         return;
     }
 
@@ -886,7 +1055,7 @@ fn update_animation(
     mut q: Query<(&Velocity, &OnGround, &PlayerState, &mut PlayerAnimation), With<Player>>,
 ) {
     let Ok((vel, on_ground, pstate, mut anim)) = q.get_single_mut() else { return };
-    if !pstate.alive {
+    if !pstate.alive || pstate.warp_timer > 0.0 {
         return;
     }
     if !on_ground.0 {
@@ -969,5 +1138,26 @@ mod tests {
         assert_eq!(frame_for_state(&frames, Stance::Stand, Direction::Right, true, true, 0.2), Some(frames[20]));
         assert_eq!(frame_for_state(&frames, Stance::Stand, Direction::Right, true, true, 0.16), Some(frames[21]));
         assert_eq!(frame_for_state(&frames, Stance::Stand, Direction::Right, false, false, 0.0), Some(frames[22]));
+    }
+
+    #[test]
+    fn variable_jump_cut_and_fast_fall_behave_like_cpp() {
+        let held = step_player_vertical_velocity(10.0, true, false, true, false);
+        let released = step_player_vertical_velocity(10.0, true, false, false, false);
+        assert!(released < held, "releasing jump should cut upward velocity");
+
+        let fast_fall = step_player_vertical_velocity(2.0, true, false, false, true);
+        assert_eq!(fast_fall, -TERMINAL_VEL, "holding down in air should trigger fast-fall");
+
+        // On ground, holding down should not snap velocity to terminal fall beyond normal gravity
+        let grounded_down = step_player_vertical_velocity(0.0, true, true, false, true);
+        assert_eq!(grounded_down, -GRAVITY);
+    }
+
+    #[test]
+    fn warp_target_respects_stage_override_or_advances_plus_three() {
+        assert_eq!(resolve_warp_target(1, 0), 4);
+        assert_eq!(resolve_warp_target(32, 0), 33);
+        assert_eq!(resolve_warp_target(2, 12), 12);
     }
 }

@@ -14,12 +14,12 @@ use crate::tilemap::GameEntity;
 #[derive(Component)]
 pub struct Enemy {
     /// 0-indexed into `EnemyFrames` (C++ enemy type 1..=15 -> 0..=14).
-    pub enemy_type: usize,
-    pub alive:      bool,
-    pub active:     bool,
-    pub start_x:    f32,
-    pub start_y:    f32,
-    pub phase:      f32,
+    pub enemy_type:   usize,
+    pub alive:        bool,
+    pub active:       bool,
+    pub start_y:      f32,
+    pub phase:        f32,
+    pub move_counter: u32,
 }
 
 /// Per-enemy-type behavior profile matching C++ `ENEMIES.cpp`.
@@ -202,9 +202,9 @@ fn spawn_enemies(
                 enemy_type: etype,
                 alive: true,
                 active: false,
-                start_x: ex,
                 start_y: ey,
                 phase: i as f32 * 0.7,
+                move_counter: 0,
             },
             behavior,
             EnemyDir(level.stage.enemy_direction[i]),
@@ -229,9 +229,48 @@ const ENEMY_SPEED:  f32 = 1.6;
 const GRAVITY:      f32 = 0.6;
 const TERMINAL_VEL: f32 = 15.0;
 
+/// One tick of C++ `ENEMY_Move_Dragon` rectangular box patrol (`ENEMIES_Move.cpp:175-198`).
+/// Returns `(dx, dy, facing_dir, next_counter)` in Bevy Y-up coordinates.
+pub fn step_dragon_patrol(counter: u32) -> (f32, f32, i32, u32) {
+    const VERTICAL: u32 = 24;
+    const HORIZONTAL: u32 = 24;
+    const TOTAL: u32 = 2 * (VERTICAL + HORIZONTAL);
+    const STEP: f32 = 2.0;
+
+    let c = counter % TOTAL;
+    let (dx, dy, dir) = if c < VERTICAL {
+        (0.0, STEP, 0)
+    } else if c < VERTICAL + HORIZONTAL {
+        (-STEP, 0.0, 0)
+    } else if c < VERTICAL + 2 * HORIZONTAL {
+        (STEP, 0.0, 1)
+    } else {
+        (0.0, -STEP, 1)
+    };
+    (dx, dy, dir, (c + 1) % TOTAL)
+}
+
+/// One tick of C++ `ENEMY_Move_Spider` horizontal scurry (`ENEMIES_Move.cpp:204-238`).
+/// Returns `(dx_dir: -1 or +1, facing_dir: 0 or 1, next_counter)`.
+pub fn step_spider_patrol(counter: u32) -> (f32, i32, u32) {
+    const FORWARD: u32 = 50;
+    const BACK: u32 = 25;
+    const TOTAL: u32 = FORWARD + BACK;
+
+    let c = counter % TOTAL;
+    let (dx, dir) = if c < FORWARD {
+        (-2.5, 0)
+    } else {
+        (2.5, 1)
+    };
+    (dx, dir, (c + 1) % TOTAL)
+}
+
 fn enemy_ai(
+    mut commands: Commands,
     cam_q: Query<&Transform, (With<PersistentCamera>, Without<Enemy>)>,
     mut q: Query<(
+        Entity,
         &mut Transform,
         &mut EnemyVelocity,
         &mut EnemyDir,
@@ -246,8 +285,16 @@ fn enemy_ai(
 ) {
     let cam_x = cam_q.get_single().map(|t| t.translation.x).unwrap_or(400.0);
 
-    for (mut tf, mut vel, mut dir, mut anim, mut sprite, mut enemy, beh, col) in &mut q {
-        if !enemy.alive { continue; }
+    for (ent, mut tf, mut vel, mut dir, mut anim, mut sprite, mut enemy, beh, col) in &mut q {
+        // Dead enemies fall off screen with gravity and despawn (matches C++ ENEMY_Gravity)
+        if !enemy.alive {
+            vel.vy = (vel.vy - GRAVITY).max(-TERMINAL_VEL);
+            tf.translation.y += vel.vy;
+            if tf.translation.y < -620.0 {
+                commands.entity(ent).despawn();
+            }
+            continue;
+        }
 
         // Activate when within screen window ahead of camera, deactivate far behind
         let dx_cam = tf.translation.x - cam_x;
@@ -259,13 +306,22 @@ fn enemy_ai(
         enemy.phase += 0.06;
 
         if beh.special_dragon {
-            // Dragon hovers in a sinusoidal patrol near start position
-            tf.translation.x = enemy.start_x + (enemy.phase * 0.7).sin() * 64.0;
-            tf.translation.y = enemy.start_y + (enemy.phase * 1.4).cos() * 24.0;
-            dir.0 = if (enemy.phase * 0.7).cos() >= 0.0 { 1 } else { 0 };
+            let (dx, dy, facing, next_c) = step_dragon_patrol(enemy.move_counter);
+            enemy.move_counter = next_c;
+            tf.translation.x += dx;
+            tf.translation.y += dy;
+            dir.0 = facing;
         } else if beh.special_spider {
-            // Spider moves up and down on its web thread
-            tf.translation.y = enemy.start_y - ((enemy.phase * 0.9).sin() * 0.5 + 0.5) * 96.0;
+            let (dx, facing, next_c) = step_spider_patrol(enemy.move_counter);
+            enemy.move_counter = next_c;
+            dir.0 = facing;
+            vel.vx = dx;
+            tf.translation.x += vel.vx;
+            resolve_enemy_x(&mut tf, &mut vel, col, &level);
+
+            vel.vy = (vel.vy - GRAVITY).max(-TERMINAL_VEL);
+            tf.translation.y += vel.vy;
+            resolve_enemy_y(&mut tf, &mut vel, col, &level);
         } else if beh.flying {
             // Bee flies horizontally with gentle bobbing, reversing on walls
             vel.vx = if dir.0 == 1 { ENEMY_SPEED * 1.1 } else { -ENEMY_SPEED * 1.1 };
@@ -320,7 +376,7 @@ fn enemy_ai(
             if tf.translation.x < 16.0 {
                 tf.translation.x = 16.0;
                 dir.0 = 1;
-            } else if tf.translation.x > 256.0 * 16.0 - col.w - 16.0 {
+            } else if tf.translation.x > level.stage_width_px - col.w - 16.0 {
                 dir.0 = 0;
             }
 
@@ -440,7 +496,7 @@ fn player_enemy_collision(
 
 fn handle_stomp(
     mut stomps:  EventReader<StompEvent>,
-    mut enemies: Query<(&mut Enemy, &mut Sprite)>,
+    mut enemies: Query<(&mut Enemy, &mut EnemyVelocity, &mut Sprite)>,
     mut player:  Query<&mut PlayerVelocity, With<Player>>,
     mut hud:     ResMut<HudState>,
     mut sfx:     EventWriter<SfxEvent>,
@@ -448,9 +504,11 @@ fn handle_stomp(
 ) {
     let mut bounced = false;
     for ev in stomps.read() {
-        if let Ok((mut enemy, mut sprite)) = enemies.get_mut(ev.enemy) {
+        if let Ok((mut enemy, mut evel, mut sprite)) = enemies.get_mut(ev.enemy) {
             if !enemy.alive { continue; }
             enemy.alive = false;
+            evel.vx = 0.0;
+            evel.vy = 2.5; // slight pop before falling off screen
 
             // Show dead frame (index 4)
             if enemy.enemy_type < frames.0.len() {
@@ -466,7 +524,6 @@ fn handle_stomp(
                 }
             }
 
-            sprite.color = Color::srgba(1.0, 1.0, 1.0, 0.5);
             hud.score += 100;
             sfx.send(SfxEvent(SfxKind::Stomp));
             bounced = true;
@@ -550,5 +607,36 @@ mod tests {
             let b = EnemyBehavior::from_cpp_type(t);
             assert!(!b.stompable && !b.shootable, "enemy type {} should be non-stompable/shootable", t);
         }
+    }
+
+    #[test]
+    fn dragon_box_patrol_returns_to_origin_in_96_ticks() {
+        let mut x = 0.0f32;
+        let mut y = 0.0f32;
+        let mut c = 0u32;
+        for _ in 0..96 {
+            let (dx, dy, _, next_c) = step_dragon_patrol(c);
+            x += dx;
+            y += dy;
+            c = next_c;
+        }
+        assert_eq!(c, 0);
+        assert_eq!(x, 0.0);
+        assert_eq!(y, 0.0);
+    }
+
+    #[test]
+    fn spider_scurries_left_50_ticks_then_right_25_ticks() {
+        let mut c = 0u32;
+        for i in 0..75 {
+            let (dx, dir, next_c) = step_spider_patrol(c);
+            if i < 50 {
+                assert!(dx < 0.0 && dir == 0);
+            } else {
+                assert!(dx > 0.0 && dir == 1);
+            }
+            c = next_c;
+        }
+        assert_eq!(c, 0);
     }
 }

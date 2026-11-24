@@ -65,6 +65,19 @@ pub struct Bullet {
     pub h: f32,
     pub power_up: u8,
     pub lifetime: f32,
+    pub anim_tick: u32,
+}
+
+/// 2-frame bullet impact explosion (`PowerUp.png` at y=272, 32x32 each; matches `GRAPHICS_Sprites_Draw.cpp:138-156`).
+#[derive(Component)]
+pub struct BulletExplosion {
+    pub timer:    f32,
+    pub duration: f32,
+}
+
+pub fn bullet_explosion_rect(timer: f32, duration: f32) -> Rect {
+    let x = if timer < duration * 0.5 { 32.0 } else { 0.0 };
+    Rect::new(x, 272.0, x + 32.0, 304.0)
 }
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
@@ -88,6 +101,7 @@ impl Plugin for PowerUpPlugin {
                    collect_powerups,
                    move_coin_pops,
                    move_bullets,
+                   tick_bullet_explosions,
                )
                    .chain()
                    .run_if(in_state(GameState::InGame).and(not_paused)),
@@ -230,6 +244,7 @@ fn handle_fire_bullet(
                 h: sh as f32,
                 power_up: ev.power_up,
                 lifetime: 3.0,
+                anim_tick: 0,
             },
             Sprite {
                 image: assets.powerups.clone(),
@@ -370,13 +385,51 @@ fn move_coin_pops(
     }
 }
 
+fn spawn_bullet_explosion(commands: &mut Commands, assets: &GameAssets, x: f32, y: f32) {
+    const DURATION: f32 = 0.22;
+    commands.spawn((
+        GameEntity,
+        BulletExplosion {
+            timer: DURATION,
+            duration: DURATION,
+        },
+        Sprite {
+            image: assets.powerups.clone(),
+            rect: Some(bullet_explosion_rect(DURATION, DURATION)),
+            custom_size: Some(Vec2::new(32.0, 32.0)),
+            anchor: bevy::sprite::Anchor::TopLeft,
+            ..default()
+        },
+        Transform::from_xyz(x, y + 8.0, 0.95),
+    ));
+}
+
+fn tick_bullet_explosions(
+    mut commands: Commands,
+    time:         Res<Time<Fixed>>,
+    mut q:        Query<(Entity, &mut BulletExplosion, &mut Sprite)>,
+) {
+    let dt = time.delta_secs();
+    for (ent, mut exp, mut sprite) in &mut q {
+        exp.timer -= dt;
+        if exp.timer <= 0.0 {
+            commands.entity(ent).despawn();
+        } else {
+            sprite.rect = Some(bullet_explosion_rect(exp.timer, exp.duration));
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn move_bullets(
     mut commands: Commands,
     time:         Res<Time<Fixed>>,
     level:        Res<LevelData>,
+    assets:       Res<GameAssets>,
+    pframes:      Res<PowerUpFrames>,
     cam_q:        Query<&Transform, (With<PersistentCamera>, Without<Bullet>, Without<Enemy>)>,
-    mut bullet_q: Query<(Entity, &mut Transform, &mut Bullet), Without<Enemy>>,
-    mut enemy_q:  Query<(&Transform, &EnemyCollider, &EnemyBehavior, &mut Enemy, &mut Sprite), Without<Bullet>>,
+    mut bullet_q: Query<(Entity, &mut Transform, &mut Bullet, &mut Sprite), Without<Enemy>>,
+    mut enemy_q:  Query<(&Transform, &EnemyCollider, &EnemyBehavior, &mut Enemy, &mut crate::enemy::EnemyVelocity, &mut Sprite), Without<Bullet>>,
     frames:       Res<EnemyFrames>,
     mut hud:      ResMut<HudState>,
     mut sfx:      EventWriter<SfxEvent>,
@@ -384,18 +437,25 @@ fn move_bullets(
     let dt = time.delta_secs();
     let cam_x = cam_q.get_single().map(|t| t.translation.x).unwrap_or(400.0);
 
-    for (b_ent, mut btf, mut bullet) in &mut bullet_q {
+    for (b_ent, mut btf, mut bullet, mut bsprite) in &mut bullet_q {
         bullet.lifetime -= dt;
         if bullet.lifetime <= 0.0 {
             commands.entity(b_ent).despawn();
             continue;
         }
 
+        // Animate bullet across 4 horizontal frames (matches C++ GRAPHICS_Sprites_Draw.cpp:121)
+        bullet.anim_tick = bullet.anim_tick.wrapping_add(1);
+        let frame_idx = ((bullet.anim_tick / 4) % 4) as i32;
+        let (bsx, bsy, bsw, bsh) = pframes.bullet;
+        let fx = (bsx + frame_idx * bsw as i32) as f32;
+        bsprite.rect = Some(Rect::new(fx, bsy as f32, fx + bsw as f32, (bsy + bsh as i32) as f32));
+
         // Homing behavior for PowerUp >= 4 (matches C++ SPRITE_Bullet_Move)
         if bullet.power_up >= 4 {
             let mut best_target: Option<Vec2> = None;
             let mut best_dist = 360.0f32 * 360.0f32;
-            for (etf, ecol, beh, enemy, _) in &enemy_q {
+            for (etf, ecol, beh, enemy, _, _) in &enemy_q {
                 if !enemy.alive || !beh.shootable { continue; }
                 let ex = etf.translation.x + ecol.w * 0.5;
                 let ey = etf.translation.y - ecol.h * 0.5;
@@ -415,6 +475,7 @@ fn move_bullets(
         }
 
         let mut despawn = false;
+        let mut explode = false;
 
         // X axis movement + solid wall check
         btf.translation.x += bullet.vx;
@@ -435,6 +496,7 @@ fn move_bullets(
                         bullet.vx = -bullet.vx;
                     } else {
                         despawn = true;
+                        explode = true;
                     }
                     break 'x_loop;
                 }
@@ -442,6 +504,9 @@ fn move_bullets(
         }
 
         if despawn {
+            if explode {
+                spawn_bullet_explosion(&mut commands, &assets, btf.translation.x, btf.translation.y);
+            }
             commands.entity(b_ent).despawn();
             continue;
         }
@@ -469,12 +534,14 @@ fn move_bullets(
         // Check enemy hits
         let bx = btf.translation.x;
         let by = -btf.translation.y;
-        for (etf, ecol, beh, mut enemy, mut sprite) in &mut enemy_q {
+        for (etf, ecol, beh, mut enemy, mut evel, mut sprite) in &mut enemy_q {
             if !enemy.alive || !beh.shootable { continue; }
             let ex = etf.translation.x;
             let ey = -etf.translation.y;
             if aabb(bx, by, bullet.w, bullet.h, ex, ey, ecol.w, ecol.h) {
                 enemy.alive = false;
+                evel.vx = 0.0;
+                evel.vy = 2.5;
                 if let Some(etype) = frames.0.get(enemy.enemy_type) {
                     if let Some(&(fx, fy, fw, fh)) = etype.frames.get(4) {
                         sprite.rect = Some(Rect::new(
@@ -486,10 +553,10 @@ fn move_bullets(
                         sprite.custom_size = Some(Vec2::new(fw as f32, fh as f32));
                     }
                 }
-                sprite.color = Color::srgba(1.0, 1.0, 1.0, 0.5);
                 hud.score += 100;
                 sfx.send(SfxEvent(SfxKind::Stomp));
                 despawn = true;
+                explode = true;
                 break;
             }
         }
@@ -500,6 +567,9 @@ fn move_bullets(
             || btf.translation.y < -520.0
             || (btf.translation.x - cam_x).abs() > 460.0
         {
+            if explode {
+                spawn_bullet_explosion(&mut commands, &assets, btf.translation.x, btf.translation.y);
+            }
             commands.entity(b_ent).despawn();
         }
     }
@@ -517,5 +587,13 @@ mod tests {
         assert_eq!(parsed.items.len(), 8);
         assert!(parsed.items.iter().all(|&(_, _, w, h)| w > 0 && h > 0));
         assert_eq!(parsed.bullet, (0, 256, 16, 16));
+    }
+
+    #[test]
+    fn bullet_explosion_switches_frames_at_midpoint() {
+        let first = bullet_explosion_rect(0.20, 0.22);
+        let second = bullet_explosion_rect(0.05, 0.22);
+        assert_eq!(first, Rect::new(0.0, 272.0, 32.0, 304.0));
+        assert_eq!(second, Rect::new(32.0, 272.0, 64.0, 304.0));
     }
 }

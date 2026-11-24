@@ -41,6 +41,8 @@ pub struct LevelData {
     pub checkpoint:            usize,
     pub sub_stage_entry_stage: Option<usize>,
     pub sub_stage_counter:     usize,
+    pub is_warping:            bool,
+    pub stage_width_px:        f32,
     pub stage:                 ImportStage,
     pub tile_info:             TileSheetInfo,
 }
@@ -60,6 +62,7 @@ impl LevelData {
         self.sub_stage_entry_stage = None;
         self.sub_stage_counter = 0;
         self.checkpoint = 0;
+        self.is_warping = false;
     }
 
     pub fn pack_name(&self) -> &str {
@@ -69,12 +72,17 @@ impl LevelData {
             .unwrap_or("Classic")
     }
 
+    pub fn refresh_stage_width(&mut self) {
+        self.stage_width_px = crate::tilemap::compute_stage_width_pixels(&self.stage, 800.0);
+    }
+
     pub fn load_stage_number(&mut self, stage_number: usize, checkpoint: usize) -> io::Result<()> {
         let path_str = self.stage_file.to_string_lossy();
         let loaded = level::load_stage(&path_str, stage_number)?;
         self.stage = loaded;
         self.stage_number = stage_number;
         self.checkpoint = checkpoint.min(3);
+        self.refresh_stage_width();
         Ok(())
     }
 }
@@ -124,6 +132,8 @@ fn start_loading(
     )
     .expect("Failed to load Tilesheetinfo.tsi");
 
+    let stage_width_px = crate::tilemap::compute_stage_width_pixels(&stage, 800.0);
+
     commands.insert_resource(LevelData {
         stage_packs,
         pack_index: 0,
@@ -132,6 +142,8 @@ fn start_loading(
         checkpoint: 0,
         sub_stage_entry_stage: None,
         sub_stage_counter: 0,
+        is_warping: false,
+        stage_width_px,
         stage,
         tile_info,
     });

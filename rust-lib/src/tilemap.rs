@@ -31,12 +31,29 @@ pub struct Tile {
 #[derive(Component)]
 pub struct AnimatedTile;
 
-/// Tracks a crumbling ground tile stepping through `568->570->572->0` or `569->571->573->0`.
+/// Tracks any tile undergoing a timed C++ `SwitchTileToNextFrame` transition
+/// (crumbling ground, coin-block blink, 5-coin step, breakable brick crack).
 #[derive(Component)]
-pub struct CrumblingTile {
-    pub tx: usize,
-    pub ty: usize,
+pub struct TimedTileSwitch {
+    pub tx:    usize,
+    pub ty:    usize,
     pub timer: f32,
+}
+
+/// Falling solid stone dislodged when Punk Giana head-bumps a `DropStone` block
+/// (matches C++ `Sprite_DropStone` in `GRAPHICS_Sprites.cpp` & `GRAPHICS_Sprites_Move.cpp`).
+#[derive(Component)]
+pub struct DropStone {
+    pub vy:     f32,
+    pub w:      f32,
+    pub h:      f32,
+    pub landed: bool,
+}
+
+#[derive(Event)]
+pub struct SpawnDropStoneEvent {
+    pub x: f32,
+    pub y: f32,
 }
 
 /// Vertical moving platform (matches C++ `Platform` in `GRAPHICS_Sprites_Move.cpp`).
@@ -242,6 +259,74 @@ pub fn set_tile<F: bevy::ecs::query::QueryFilter>(
     tile_grid.entities[tx][ty] = Some(ec.id());
 }
 
+/// Computes the trimmed stage width in pixels from the rightmost non-empty tile column
+/// (matches C++ `CONTENT_Stages_Load_Write.cpp:329-344`).
+pub fn compute_stage_width_pixels(stage: &crate::level::ImportStage, min_width: f32) -> f32 {
+    let mut last_col = 0usize;
+    for x in 0..STAGE_COLS {
+        for y in 0..STAGE_ROWS {
+            if stage.array[x][y] != 0 {
+                last_col = x;
+                break;
+            }
+        }
+    }
+    ((last_col + 1) as f32 * TILE_W).max(min_width)
+}
+
+/// Maps an animated transition tile ID to its next frame ID
+/// (matches C++ `SwitchTileToNextFrame` in `src/GRAPHICS_Tiles_Animations.cpp`).
+pub fn next_tile_switch_id(tile_id: i32) -> Option<i32> {
+    match tile_id {
+        // Crumbling ground: 568->570->572->0, 569->571->573->0
+        568..=571 => Some(tile_id + 2),
+        572 | 573 => Some(0),
+
+        // 1-coin block & warp stone blink -> spent block (587..589 / 627..629)
+        563..=565 | 603..=605 => Some(tile_id + 24),
+
+        // Breakable block crack frames: 504..506->507..509->0, 544..546->547..549->0
+        504..=506 | 544..=546 => Some(tile_id + 3),
+        507..=509 | 547..=549 => Some(0),
+
+        // 5-coin multi-hit block blink frames -> next interactive coin-block state
+        643..=645
+        | 683..=685
+        | 649..=651
+        | 689..=691
+        | 655..=657
+        | 695..=697
+        | 661..=663
+        | 701..=703 => Some(tile_id + 3),
+
+        // 5-coin block final hit blink -> spent block
+        667 => Some(587),
+        668 => Some(588),
+        669 => Some(589),
+        707 => Some(627),
+        708 => Some(628),
+        709 => Some(629),
+
+        _ => None,
+    }
+}
+
+/// Attaches a `TimedTileSwitch` component to tile `(tx, ty)` if its current tile ID has a follow-up frame.
+pub fn schedule_tile_switch(
+    commands:  &mut Commands,
+    tile_grid: &TileGrid,
+    tx:        usize,
+    ty:        usize,
+    delay:     f32,
+) {
+    if tx >= STAGE_COLS || ty >= STAGE_ROWS {
+        return;
+    }
+    if let Some(ent) = tile_grid.entities[tx][ty] {
+        commands.entity(ent).insert(TimedTileSwitch { tx, ty, timer: delay });
+    }
+}
+
 /// Triggers a crumbling ground tile (`566` or `567`) when the player steps on it.
 pub fn trigger_crumble_tile<F: bevy::ecs::query::QueryFilter>(
     commands:  &mut Commands,
@@ -261,9 +346,7 @@ pub fn trigger_crumble_tile<F: bevy::ecs::query::QueryFilter>(
         _   => return,
     };
     set_tile(commands, tile_grid, level, tile_q, assets, tx, ty, next_id);
-    if let Some(ent) = tile_grid.entities[tx][ty] {
-        commands.entity(ent).insert(CrumblingTile { tx, ty, timer: 0.16 });
-    }
+    schedule_tile_switch(commands, tile_grid, tx, ty, 0.14);
 }
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
@@ -276,6 +359,7 @@ impl Plugin for TileMapPlugin {
            .init_resource::<TileAnimClock>()
            .init_resource::<GamePaused>()
            .init_resource::<PauseSelection>()
+           .add_event::<SpawnDropStoneEvent>()
            .add_systems(OnEnter(GameState::StageTransition), enter_stage_transition)
            .add_systems(
                Update,
@@ -288,7 +372,13 @@ impl Plugin for TileMapPlugin {
            )
            .add_systems(
                FixedUpdate,
-               (move_platforms, tick_crumbling_tiles)
+               (
+                   move_platforms,
+                   handle_spawn_drop_stone,
+                   move_drop_stones,
+                   tick_timed_tile_switches,
+               )
+                   .chain()
                    .run_if(in_state(GameState::InGame).and(not_paused)),
            )
            .add_systems(
@@ -325,13 +415,21 @@ fn enter_stage_transition(
         return;
     }
 
-    commands.insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.12)));
-    commands.insert_resource(StageTransitionTimer(Timer::from_seconds(0.75, TimerMode::Once)));
+    let warping = level.is_warping;
+    level.is_warping = false;
 
-    let headline = if target_stage > MAX_CLASSIC_STAGE {
+    commands.insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.12)));
+    commands.insert_resource(StageTransitionTimer(Timer::from_seconds(
+        if warping { 1.1 } else { 0.75 },
+        TimerMode::Once,
+    )));
+
+    let headline = if warping {
+        format!("WARPING!!!  STAGE {:02}", target_stage)
+    } else if target_stage > MAX_CLASSIC_STAGE {
         format!("BONUS STAGE {}", target_stage - MAX_CLASSIC_STAGE)
     } else {
-        format!("STAGE {}", target_stage)
+        format!("STAGE {:02}", target_stage)
     };
     let stage_name = stage_display_name(&level.stage.name, target_stage);
 
@@ -399,19 +497,21 @@ fn exit_stage_transition(mut commands: Commands, q: Query<Entity, With<Transitio
 // ── In-game tilemap, platforms, animations & crumbling ────────────────────────
 
 fn reset_camera(
-    level: Res<LevelData>,
+    level:   Res<LevelData>,
+    win_q:   Query<&Window>,
     mut cam_q: Query<&mut Transform, With<PersistentCamera>>,
 ) {
     let Ok(mut cam_tf) = cam_q.get_single_mut() else { return };
+    let viewport_w = win_q.get_single().map(|w| w.width()).unwrap_or(800.0);
     let start = crate::player::player_start_position(&level);
-    cam_tf.translation.x = clamp_camera_x(start.x);
+    cam_tf.translation.x = clamp_camera_x(start.x, level.stage_width_px, viewport_w);
     cam_tf.translation.y = -240.0;
 }
 
-fn clamp_camera_x(x: f32) -> f32 {
-    let min_x = 400.0;
-    let max_x = STAGE_COLS as f32 * TILE_W - 400.0;
-    x.clamp(min_x, max_x)
+pub fn clamp_camera_x(x: f32, stage_width_px: f32, viewport_w: f32) -> f32 {
+    let half = viewport_w * 0.5;
+    let max_x = (stage_width_px - half).max(half);
+    x.clamp(half, max_x)
 }
 
 fn spawn_tiles(
@@ -554,50 +654,124 @@ fn animate_tiles(
     }
 }
 
-fn tick_crumbling_tiles(
+fn handle_spawn_drop_stone(
+    mut commands: Commands,
+    mut events:   EventReader<SpawnDropStoneEvent>,
+    level:        Res<LevelData>,
+    assets:       Res<GameAssets>,
+) {
+    // Matches C++ GRAPHICS_Sprites.cpp:95-98 & GRAPHICS_Sprites_Draw.cpp:166-168
+    const STONE_W: f32 = 48.0;
+    const STONE_H: f32 = 32.0;
+    let src_y = (224.0 + level.stage.tile_type.max(0) as f32 * 10.0 * TILE_H)
+        .clamp(0.0, TILESHEET_H - STONE_H);
+
+    for ev in events.read() {
+        commands.spawn((
+            GameEntity,
+            DropStone {
+                vy: 0.0,
+                w: STONE_W,
+                h: STONE_H,
+                landed: false,
+            },
+            Sprite {
+                image: assets.tiles.clone(),
+                rect: Some(Rect::new(384.0, src_y, 384.0 + STONE_W, src_y + STONE_H)),
+                custom_size: Some(Vec2::new(STONE_W, STONE_H)),
+                anchor: bevy::sprite::Anchor::TopLeft,
+                ..default()
+            },
+            Transform::from_xyz(ev.x, ev.y, 0.45),
+        ));
+    }
+}
+
+fn move_drop_stones(
+    mut commands: Commands,
+    level:        Res<LevelData>,
+    mut q:        Query<(Entity, &mut Transform, &mut DropStone)>,
+) {
+    const GRAVITY: f32 = 0.6;
+    const TERMINAL_VEL: f32 = 15.0;
+
+    for (ent, mut tf, mut stone) in &mut q {
+        stone.vy = (stone.vy - GRAVITY).max(-TERMINAL_VEL);
+        tf.translation.y += stone.vy;
+        stone.landed = false;
+
+        let px = tf.translation.x;
+        let py = -tf.translation.y;
+        let bottom_ty = ((py + stone.h) / TILE_H).floor() as i32;
+        let left_tx = ((px + 1.0) / TILE_W).floor() as i32;
+        let mid_tx = ((px + stone.w * 0.5) / TILE_W).floor() as i32;
+        let right_tx = ((px + stone.w - 1.0) / TILE_W).floor() as i32;
+
+        if crate::player::is_solid(left_tx, bottom_ty, &level)
+            || crate::player::is_solid(mid_tx, bottom_ty, &level)
+            || crate::player::is_solid(right_tx, bottom_ty, &level)
+        {
+            tf.translation.y = -(bottom_ty as f32 * TILE_H - stone.h);
+            stone.vy = 0.0;
+            stone.landed = true;
+        }
+
+        if tf.translation.y < -600.0 {
+            commands.entity(ent).despawn();
+        }
+    }
+}
+
+fn tick_timed_tile_switches(
     mut commands:  Commands,
     time:          Res<Time<Fixed>>,
     mut level:     ResMut<LevelData>,
     mut tile_grid: ResMut<TileGrid>,
     assets:        Res<GameAssets>,
-    mut crumb_q:   Query<(Entity, &mut CrumblingTile)>,
+    mut switch_q:  Query<(Entity, &mut TimedTileSwitch)>,
     mut tile_q:    Query<(&mut Tile, &mut Sprite, &mut Visibility)>,
 ) {
     let dt = time.delta_secs();
     let mut updates: Vec<(Entity, usize, usize, i32)> = Vec::new();
+    let mut finished: Vec<Entity> = Vec::new();
 
-    for (ent, mut crumb) in &mut crumb_q {
-        crumb.timer -= dt;
-        if crumb.timer <= 0.0 {
-            crumb.timer = 0.16;
-            let cur = level.stage.array[crumb.tx][crumb.ty];
-            let next_id = match cur {
-                568..=571 => cur + 2,
-                572 | 573 => 0,
-                _         => 0,
-            };
-            updates.push((ent, crumb.tx, crumb.ty, next_id));
+    for (ent, mut sw) in &mut switch_q {
+        sw.timer -= dt;
+        if sw.timer <= 0.0 {
+            let cur = level.stage.array[sw.tx][sw.ty];
+            if let Some(next_id) = next_tile_switch_id(cur) {
+                sw.timer = 0.14;
+                updates.push((ent, sw.tx, sw.ty, next_id));
+            } else {
+                finished.push(ent);
+            }
         }
     }
 
     for (ent, tx, ty, next_id) in updates {
         set_tile(&mut commands, &mut tile_grid, &mut level, &mut tile_q, &assets, tx, ty, next_id);
-        if next_id == 0 {
-            // Entity already despawned by set_tile; guard in case it wasn't
-            let _ = ent;
+        if next_id != 0 && next_tile_switch_id(next_id).is_none() {
+            commands.entity(ent).remove::<TimedTileSwitch>();
         }
+    }
+
+    for ent in finished {
+        commands.entity(ent).remove::<TimedTileSwitch>();
     }
 }
 
-/// Smooth camera follow — tracks the player entity's X position within stage bounds.
+/// Smooth camera follow — tracks the player entity's X position within trimmed stage bounds.
 fn camera_follow(
+    level:    Res<LevelData>,
+    win_q:    Query<&Window>,
     player_q: Query<&Transform, (With<crate::player::Player>, Without<PersistentCamera>)>,
     mut cam_q: Query<&mut Transform, With<PersistentCamera>>,
 ) {
     let Ok(player_tf) = player_q.get_single() else { return };
     let Ok(mut cam_tf) = cam_q.get_single_mut() else { return };
+    let viewport_w = win_q.get_single().map(|w| w.width()).unwrap_or(800.0);
 
-    let target_x = clamp_camera_x(player_tf.translation.x);
+    let target_x = clamp_camera_x(player_tf.translation.x, level.stage_width_px, viewport_w);
     let target_y = -240.0;
     cam_tf.translation.x += (target_x - cam_tf.translation.x) * 0.12;
     cam_tf.translation.y += (target_y - cam_tf.translation.y) * 0.12;
@@ -784,5 +958,55 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn five_coin_block_and_breakable_switch_chains_match_cpp() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Tilesheetinfo.tsi");
+        let info = crate::tile_properties::load_tile_properties(path.to_str().unwrap()).unwrap();
+
+        // 5-coin block starts at 640 (top-left) and steps +3 on bump -> +3 on timer 4 times,
+        // remaining a coin_block for 5 total hits before becoming spent (587).
+        let mut id = 640i32;
+        for hit in 0..5 {
+            assert!(
+                info.coin_block[id as usize] != 0 || info.coin_block_helmet[id as usize] != 0,
+                "hit {} expected coin_block flag on tile {}",
+                hit,
+                id
+            );
+            id += 3; // player bump
+            id = next_tile_switch_id(id).expect("expected timed switch after bump");
+        }
+        assert_eq!(id, 587, "5-coin block should settle on spent tile 587 after 5 hits");
+        assert_eq!(next_tile_switch_id(587), None);
+
+        // Breakable block: 501 -> bump(+3)=504 -> 507 -> 0
+        assert_eq!(next_tile_switch_id(504), Some(507));
+        assert_eq!(next_tile_switch_id(507), Some(0));
+
+        // Crumbling ground: 568 -> 570 -> 572 -> 0
+        assert_eq!(next_tile_switch_id(568), Some(570));
+        assert_eq!(next_tile_switch_id(570), Some(572));
+        assert_eq!(next_tile_switch_id(572), Some(0));
+    }
+
+    #[test]
+    fn stage_width_trims_short_substages_for_camera_clamp() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let stage1 = crate::level::load_stage(path.to_str().unwrap(), 1).unwrap();
+        let substage = crate::level::load_stage(path.to_str().unwrap(), 34).unwrap();
+
+        let w1 = compute_stage_width_pixels(&stage1, 800.0);
+        let ws = compute_stage_width_pixels(&substage, 800.0);
+        assert!(w1 >= 800.0 && w1 <= STAGE_COLS as f32 * TILE_W);
+        assert!(ws >= 800.0 && ws <= w1);
+
+        // On an 800px-wide stage with an 800px viewport, camera stays fixed at x=400.
+        assert_eq!(clamp_camera_x(0.0, 800.0, 800.0), 400.0);
+        assert_eq!(clamp_camera_x(999.0, 800.0, 800.0), 400.0);
+        // On a 2000px-wide stage, camera clamps between 400 and 1600.
+        assert_eq!(clamp_camera_x(100.0, 2000.0, 800.0), 400.0);
+        assert_eq!(clamp_camera_x(1900.0, 2000.0, 800.0), 1600.0);
     }
 }
