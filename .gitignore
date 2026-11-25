@@ -1,22 +1,11 @@
-CMakeCache.txt
-CMakeFiles
-CMakeScripts
-Makefile
-cmake_install.cmake
-install_manifest.txt
-CTestTestfile.cmake
-build
-cmake-build-debug/
+# Rust build output
+target/
+
+# IDE & OS files
+.idea/
+.DS_Store
+
+# Runtime logs / scratch
 my_stderr.txt
 my_stdout.txt
 test.txt
-openggs
-.idea/
-*.exe
-*.dll
-openggs.pdb
-Options.oi
-
-# rust stuff
-target/
-Cargo.lock 

@@ -579,7 +579,7 @@ mod tests {
 
     #[test]
     fn load_enemy_frames_parses_all_types() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/c64/Enemies.txt");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/c64/Enemies.txt");
         let types = load_enemy_frames(path.to_str().unwrap());
         assert_eq!(types.len(), 15, "expected 15 enemy types in Enemies.txt");
 

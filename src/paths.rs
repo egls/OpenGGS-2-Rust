@@ -81,6 +81,7 @@ pub fn resolve_base_dir() -> PathBuf {
         }
     }
 
+    candidates.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("base"));
     candidates.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../base"));
 
     for candidate in candidates {
@@ -89,7 +90,7 @@ pub fn resolve_base_dir() -> PathBuf {
         }
     }
 
-    PathBuf::from("../base")
+    PathBuf::from("base")
 }
 
 /// Formats a `.lvl` file stem into a clean display label (e.g. `my_pack` -> `My Pack`).

@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn load_tilesheet_properties_from_base() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Tilesheetinfo.tsi");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/Tilesheetinfo.tsi");
         let info = load_tile_properties(path.to_str().unwrap())
             .expect("Tilesheetinfo.tsi should load");
 
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn save_tile_properties_round_trips_and_toggles_all_flags() {
-        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Tilesheetinfo.tsi");
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/Tilesheetinfo.tsi");
         let tmp = std::env::temp_dir().join(format!(
             "openggs_tsi_test_{}.tsi",
             std::process::id()

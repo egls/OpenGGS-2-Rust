@@ -1126,7 +1126,7 @@ mod tests {
 
     #[test]
     fn load_player_frames_covers_normal_punk_morph_and_dead() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/c64/Player.txt");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/c64/Player.txt");
         let frames = load_player_frames(path.to_str().unwrap());
         assert_eq!(frames.len(), 23, "expected 23 frames in Player.txt");
 

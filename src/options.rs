@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn saved_options_size_matches_options_oi() {
         assert_eq!(mem::size_of::<SavedOptions>(), 32);
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Options.oi");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/Options.oi");
         let opts = load_saved_options(path.to_str().unwrap()).expect("Options.oi should load");
         assert!(opts.screen_width > 0 && opts.screen_height > 0);
     }

@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn all_four_it_music_tracks_parse_and_generate_pcm() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/music");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/music");
         for name in ["title.it", "outdoors.it", "indoors.it", "highscore.it"] {
             let path = dir.join(name);
             let module = load_tracker_module(path.to_str().unwrap())

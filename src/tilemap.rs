@@ -1110,7 +1110,7 @@ mod tests {
 
     #[test]
     fn animated_tile_rects_stay_within_tilesheet_bounds() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Tilesheetinfo.tsi");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/Tilesheetinfo.tsi");
         let info = crate::tile_properties::load_tile_properties(path.to_str().unwrap()).unwrap();
 
         for tile_id in 1..2320i32 {
@@ -1128,7 +1128,7 @@ mod tests {
 
     #[test]
     fn five_coin_block_and_breakable_switch_chains_match_cpp() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/Tilesheetinfo.tsi");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/Tilesheetinfo.tsi");
         let info = crate::tile_properties::load_tile_properties(path.to_str().unwrap()).unwrap();
 
         // 5-coin block starts at 640 (top-left) and steps +3 on bump -> +3 on timer 4 times,
@@ -1159,7 +1159,7 @@ mod tests {
 
     #[test]
     fn stage_width_trims_short_substages_for_camera_clamp() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/stages/classic.lvl");
         let stage1 = crate::level::load_stage(path.to_str().unwrap(), 1).unwrap();
         let substage = crate::level::load_stage(path.to_str().unwrap(), 34).unwrap();
 

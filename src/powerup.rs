@@ -582,7 +582,7 @@ mod tests {
 
     #[test]
     fn load_powerup_frames_parses_items_and_bullet() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/c64/PowerUp.txt");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/c64/PowerUp.txt");
         let parsed = load_powerup_frames(path.to_str().unwrap());
         assert_eq!(parsed.items.len(), 8);
         assert!(parsed.items.iter().all(|&(_, _, w, h)| w > 0 && h > 0));

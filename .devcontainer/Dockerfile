@@ -1,42 +1,20 @@
-FROM ubuntu:latest
+FROM rust:1-bookworm
 
-# Prevent some interactive dialogs during package installs
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Create a non-root user named 'openggs'
-RUN useradd -ms /bin/bash openggs
-
-# Switch to root for installations
-USER root
-
-# Install development packages: Clang, Clang-Tidy, SDL2, etc.
+# Install Linux dependencies required for Bevy (audio, input, windowing, Vulkan/Mesa)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        clang \
-        clang-tidy \
-        clang-format-18 \
-        lldb \
-        gdb \
-        curl \
-        cmake \
-        bash-completion \
-        vim \
-        git \
-        libsdl2-dev \
-        libsdl2-image-dev \
-        libsdl2-mixer-dev && \
-    rm -rf /var/lib/apt/lists/*
+        pkg-config \
+        libasound2-dev \
+        libudev-dev \
+        libx11-dev \
+        libwayland-dev \
+        libxkbcommon-dev \
+        git && \
+    rm -rf /var/lib/apt/lists/* && \
+    rustup component add clippy rustfmt
 
-# Optionally set Clang as the default compiler
-ENV CC=clang
-ENV CXX=clang++
-
-# Switch to openggs user and set working directory
+RUN useradd -ms /bin/bash openggs
 USER openggs
 WORKDIR /home/openggs
-
-# Install Git prompt script for a nicer shell experience
-# RUN curl -L https://raw.github.com/git/git/master/contrib/completion/git-prompt.sh > ~/.bash_git && \
-#    echo "source ~/.bash_git" >> ~/.bashrc && \
-#    sed -Ei 's/(PS1=.*)(\\\[\\033\[00m\\\]\\\$.*)/\1\\[\\033[01;33m\\]$(__git_ps1)\2/p' ~/.bashrc

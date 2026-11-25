@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn load_classic_stage_1() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/stages/classic.lvl");
         let stage = load_stage(path.to_str().unwrap(), 1).expect("classic.lvl stage 1 should load");
 
         let non_empty_tiles: usize = stage
@@ -110,13 +110,13 @@ mod tests {
 
     #[test]
     fn load_out_of_bounds_stage_fails() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/stages/classic.lvl");
         assert!(load_stage(path.to_str().unwrap(), 999).is_err());
     }
 
     #[test]
     fn all_33_classic_stages_and_substages_load() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/stages/classic.lvl");
         for stage_num in 1..=37 {
             let stage = load_stage(path.to_str().unwrap(), stage_num)
                 .unwrap_or_else(|e| panic!("classic.lvl stage {} failed to load: {}", stage_num, e));
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn all_stage_packs_load_stage_1() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/stages");
         for pack in ["classic.lvl", "new.lvl", "modules.lvl"] {
             let path = dir.join(pack);
             let stage = load_stage(path.to_str().unwrap(), 1)
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn save_stage_round_trips_without_corrupting_adjacent_stages() {
-        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../base/stages/classic.lvl");
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("base/stages/classic.lvl");
         let tmp = std::env::temp_dir().join(format!(
             "openggs_stage_save_test_{}.lvl",
             std::process::id()
