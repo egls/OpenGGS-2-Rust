@@ -1,0 +1,16 @@
+[package]
+name = "openggs-bevy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.15", features = ["wav", "mp3"] }
+xmrs = "0.15.2"
+xmrsplayer = "0.15.0"
+
+# Speed up compilation in dev
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
